@@ -415,3 +415,26 @@ Assumptions stated at the start of the phase:
 - core gained `GameLog.get(id)` and `GameLog.discard(id)`. `discard` refuses durable events; the
   durable log stays append-only.
 - Mutation-checked: removing "durable copy confirms pending" or the `discard` broadcast fails tests.
+
+### Step 4: reconnect, gaps and convergence
+
+- Catch-up (`fetchSince(contiguous)`) runs:
+  1. on every `online` status (reconnect);
+  2. immediately when a durable event arrives with a seq beyond `contiguous + 1` (a gap);
+  3. on a **poll every `pollMs` (10 s)**. Found while designing the property test: if the *last*
+     durable broadcast is lost, no later seq reveals the gap. Over a WebSocket that mostly
+     happens around reconnects (already covered), but the poll makes it certain. One small RPC
+     per 10 s per device.
+- `contiguous` = highest seq such that every seq up to it has been received.
+- Simulator additions: `step(n)` to observe in-flight states; idle tasks (poll timers) don't hold
+  `settle()` open; `advance(ms)` runs virtual time including them. `setTimer` receives a
+  `kind` ('retry' | 'poll') so tests can tell them apart.
+- **Property test (`convergence.test.ts`)**: 2 and 3 clients, random taps (shots, timeouts,
+  rebounds, amends, voids of random known events), random online/offline toggles and waits,
+  random network (latency 1-40, drop <= 40%, duplicate <= 30%, lost ack <= 30%). After healing,
+  every client's log and state equal the log built from the server, and every tap is on the
+  server exactly once. 60 runs each in CI; soaked at 500 each.
+- Mutation-checked: disabling the poll, or catch-up on reconnect, fails their targeted tests.
+  Silently dropping an outbox event on a network error fails both convergence properties.
+- Speed: the simulator yields with `setImmediate` where available. `setTimeout(0)` is clamped to
+  >= 1 ms and made the suite take 172 s instead of under 1 s.

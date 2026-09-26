@@ -2,6 +2,8 @@ import { GameLog, isCorrection, parseEvent, type EventOf, type GameEvent } from 
 import type { LocalStore, StoredEvent } from './store';
 import { NetworkError, Rejected, type SyncTransport } from './transport';
 
+type Timer = (fn: () => void, ms: number, kind: 'retry' | 'poll') => void;
+
 export interface GameSyncOptions {
   gameId: string;
   deviceId: string;
@@ -9,8 +11,10 @@ export interface GameSyncOptions {
   store: LocalStore;
   /** Retry delay after a network failure while online. */
   retryMs?: number;
+  /** Safety-net catch-up interval while connected (a lost final broadcast leaves no gap to notice). */
+  pollMs?: number;
   /** Injected for deterministic tests; defaults to setTimeout. */
-  setTimer?: (fn: () => void, ms: number) => void;
+  setTimer?: Timer;
 }
 
 /**
@@ -35,7 +39,8 @@ export class GameSync {
   private readonly transport: SyncTransport;
   private readonly store: LocalStore;
   private readonly retryMs: number;
-  private readonly setTimer: (fn: () => void, ms: number) => void;
+  private readonly pollMs: number;
+  private readonly setTimer: Timer;
   /** Own unconfirmed events, in deviceSeq order. */
   private pending: GameEvent[] = [];
   private deviceSeq = 0;
@@ -53,6 +58,7 @@ export class GameSync {
     this.transport = o.transport;
     this.store = o.store;
     this.retryMs = o.retryMs ?? 2000;
+    this.pollMs = o.pollMs ?? 10_000;
     this.setTimer = o.setTimer ?? ((fn, ms) => setTimeout(fn, ms));
   }
 
@@ -75,6 +81,7 @@ export class GameSync {
       onDiscard: (id) => sync.discard(id),
       onStatus: (status) => sync.setStatus(status),
     });
+    sync.poll();
     return sync;
   }
 
@@ -196,13 +203,19 @@ export class GameSync {
     this.onChange();
   }
 
+  private poll() {
+    if (this.closed) return;
+    void this.catchUp();
+    this.setTimer(() => this.poll(), this.pollMs, 'poll');
+  }
+
   private retryLater() {
     if (this.retryScheduled) return;
     this.retryScheduled = true;
     this.setTimer(() => {
       this.retryScheduled = false;
       void this.flush();
-    }, this.retryMs);
+    }, this.retryMs, 'retry');
   }
 
   /** Estimate the server clock offset from one round trip (NTP-style midpoint). */

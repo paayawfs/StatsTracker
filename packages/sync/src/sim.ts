@@ -23,7 +23,7 @@ export class SimNetwork {
   /** Return a rejection reason to make the server refuse an event. */
   rejectIf: (e: GameEvent) => string | null = () => null;
   now = 0;
-  private queue: { at: number; order: number; run: () => void }[] = [];
+  private queue: { at: number; order: number; run: () => void; idle: boolean }[] = [];
   private order = 0;
   private seed: number;
   readonly transports: SimTransport[] = [];
@@ -49,8 +49,21 @@ export class SimNetwork {
     return t;
   }
 
-  schedule(run: () => void, delay = this.delay()) {
-    this.queue.push({ at: this.now + delay, order: this.order++, run });
+  /** Idle tasks (periodic timers) do not keep settle() running; advance() runs them. */
+  schedule(run: () => void, delay = this.delay(), idle = false) {
+    this.queue.push({ at: this.now + delay, order: this.order++, run, idle });
+  }
+
+  /** Run everything, idle tasks included, up to now + ms of virtual time. */
+  async advance(ms: number) {
+    const until = this.now + ms;
+    for (;;) {
+      await flushMicrotasks();
+      this.queue.sort((a, b) => a.at - b.at || a.order - b.order);
+      if (!this.queue.length || this.queue[0]!.at > until) break;
+      await this.runNext();
+    }
+    this.now = until;
   }
 
   delay(): number {
@@ -95,14 +108,17 @@ export class SimNetwork {
   async settle(maxSteps = 100_000) {
     for (let i = 0; i < maxSteps; i++) {
       await flushMicrotasks();
-      if (!this.queue.length) return;
+      if (this.queue.every((t) => t.idle)) return;
       await this.runNext();
     }
     throw new Error('network did not settle');
   }
 }
 
-const flushMicrotasks = () => new Promise<void>((r) => setTimeout(r, 0));
+// setImmediate (Node) lets pending promise callbacks and fake-indexeddb run without the ~1 ms
+// clamp of setTimeout(0), which made property tests slow.
+const yieldToEventLoop = (globalThis as { setImmediate?: (fn: () => void) => void }).setImmediate ?? ((fn: () => void) => setTimeout(fn, 0));
+const flushMicrotasks = () => new Promise<void>((r) => yieldToEventLoop(r));
 
 export class SimTransport implements SyncTransport {
   online = true;

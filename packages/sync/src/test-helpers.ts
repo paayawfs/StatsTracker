@@ -18,7 +18,7 @@ export async function client(net: SimNetwork, deviceId: string, store?: LocalSto
     deviceId,
     transport: t,
     store: s,
-    setTimer: (fn, ms) => net.schedule(fn, ms),
+    setTimer: (fn, ms, kind) => net.schedule(fn, ms, kind === 'poll'),
   });
   return { sync, t, store: s };
 }
