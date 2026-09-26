@@ -90,3 +90,20 @@ These override the original build brief where they differ.
 - Property tests use `arbGameLog` (random, structurally valid, not rule-valid logs). Gotcha: a
   fast-check property that returns a falsy value fails, so use block bodies around `expect`.
 - Checked the duplicate-id property test by temporarily removing dedupe: it fails as it should.
+
+### Step 4: canonical ordering and GameLog
+
+- `log.ts`: `compareEvents` and `GameLog`.
+- Order: `period` asc, `gameClock` desc, `seq` asc with unconfirmed (`null`) last, then `wallClock`,
+  then `id`. The `id` tie-break makes it a total order, so every device converges on the same log.
+- `GameLog` keeps the sorted events **and the state after each event**. `add(e)`:
+  - duplicate id -> ignored (returns -1)
+  - durable version (has `seq`) of an unconfirmed event -> replaces it ("durable wins")
+  - stale unconfirmed copy of a durable event -> ignored
+  - otherwise inserted at its sorted position; replay runs only from that index.
+  - Returns the index replay started from. A normal tap appends and applies exactly one event,
+    which satisfies "never replay the full log on a tap".
+- Memory: one ~1 KB state per event; a 1000-event game is about 1 MB. Fine for now; keep
+  checkpoints every N events instead if it ever matters.
+- Insertion scans from the end because nearly every event lands at or near the end.
+- Property test: any arrival permutation of a canonical log produces the identical log and state.
