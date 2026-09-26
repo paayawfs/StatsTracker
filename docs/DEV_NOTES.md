@@ -137,3 +137,52 @@ These override the original build brief where they differ.
 - **Bug found by property test (fixed):** `arbGameLog` reset the clock to 10:00 in overtime
   instead of 5:00, so generated OT logs weren't canonical and the arrival-order property failed on
   rare runs. The fix was in the generator. `GameLog` was right. A 3000-run soak passes.
+
+### Step 6: corrections
+
+- Lives in `GameLog` (`log.ts`), not the reducer: corrections change *which* events the reducer
+  sees, so they're resolved before folding.
+- `GameLog.events` = each game event in its corrected form (amended body, or absent if voided),
+  plus the `amend`/`void` events themselves as markers at the time they were made. The reducer
+  treats markers as no-ops apart from the `locked-correction` flag.
+- Per target, the winning correction is the latest by **write order**: `seq` (unconfirmed last),
+  then `wallClock`, then `id`. So:
+  - concurrent amends: higher `seq` wins whatever the arrival order;
+  - a local unconfirmed amend shows immediately and wins until its durable copy arrives with a
+    real `seq`;
+  - a later amend can restore a voided event (void then amend = amend).
+- `amend` replaces the whole body (type + payload) but keeps the envelope, so the event stays in
+  its original position.
+- A correction may arrive before its target (offline merge); it applies when the target arrives.
+- Corrections aimed at corrections are ignored.
+- Admin lock: after an `adminLock` (by write order) only `role: 'admin'` corrections apply. A lock
+  arriving late re-resolves every corrected event.
+- `correctionsFor(id)` returns the corrections in force for an event, winner last. Phase 5 uses it
+  for the "your amendment was overridden" notification.
+- Known gap: voiding an `adminLock` does not unlock. Unlocking should be an explicit admin action
+  if it's ever needed.
+
+## Phase 1 report
+
+**Built:** `packages/core`: rule sets with FIBA and NBA presets, valibot schemas for every event
+type, a pure incremental reducer, canonical ordering, `GameLog` with insertion-point replay,
+validation as data-quality flags, and corrections with last-write-wins.
+
+**Verified (132 tests, `pnpm test`; `pnpm typecheck` clean):**
+- Schema accept/reject for every event type; rule set rejects bad values.
+- Reducer unit tests per event type; a hand-built clean game raises zero flags; every section 10
+  rule has a test that triggers its flag.
+- Property tests (fast-check): replay determinism, duplicate-id idempotency, `apply` never mutates
+  input, any arrival order converges to the same log and state (with and without corrections),
+  void-then-replay equals never having the event. Soaked at 2000-3000 runs.
+- Mutation checks: removing duplicate-id handling or the lock rule makes the matching tests fail.
+- Timing (1000-event game, Node, dev laptop): append p50 0.018 ms, p99 0.045 ms; worst case
+  (void of the first event, full replay) about 20 ms.
+
+**Not verified / not built:**
+- Timing on a throttled phone CPU (Phase 4 e2e). The 20 ms worst case is the `structuredClone`
+  per event; structural sharing is the fix if phones are slow.
+- NBA `teamFoulKinds` (offensive and technical excluded) is from memory. Check the rulebook.
+- Not modelled: FIBA/NBA end-of-game timeout and bonus specials, coach technical limits,
+  ownership/role authority (server-side, Phase 2), derived stats (Phase 6).
+- Validation doesn't flag rebound kind vs team mismatch (e.g. "offensive" rebound by the defence).
