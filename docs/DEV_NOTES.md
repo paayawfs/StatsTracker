@@ -225,3 +225,17 @@ validation as data-quality flags, and corrections with last-write-wins.
   `as_anon`, `as_postgres`, `game_fixture`, `event`. Seeds never run on hosted projects.
   - `tests.login` sets `role` + `request.jwt.claims`, the same thing PostgREST does, so RLS and
     `auth.uid()` behave as they do for real requests.
+
+### Step 3: insert_event
+
+- `insert_event(event jsonb) -> seq`, the only way to write events. In order:
+  1. JSON Schema check (`22023` on failure);
+  2. `select ... for update` on the game row (serialises seq per game, other games unaffected);
+  3. caller must be a scorer of the game or a league admin (`42501`);
+  4. same event id already stored -> return its seq (outbox resends are safe; `23505` if the id
+     belongs to another game);
+  5. `authorize_event` (step 4);
+  6. `last_seq + 1` -> insert.
+- The client's `seq` is ignored; the server's is canonical.
+- `event_json(row)` turns a row back into the core `GameEvent` shape (camelCase).
+- Test 02 claims the `single` role first because it runs with step 4's authority rules.
