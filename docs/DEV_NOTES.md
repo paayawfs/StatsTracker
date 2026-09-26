@@ -211,3 +211,17 @@ validation as data-quality flags, and corrections with last-write-wins.
   - Cross-field `v.check`s (assist only on a make, etc.) don't translate to JSON Schema; they stay
     client-side, and core flags or rejects them on parse.
   - The JSON Schema does not forbid unknown keys (valibot strips them on the client).
+
+### Step 2: schema
+
+- Tables: `leagues`, `league_admins`, `rule_sets` (core RuleSet as jsonb), `seasons`, `teams`,
+  `players`, `games`, `game_roster`, `game_codes`, `game_scorers`, `role_claims`, `events`.
+- No game state is stored. `games.last_seq` is the only counter.
+- `games.public_slug` = 122 random bits (uuid without dashes) for public viewer links.
+- `events` is append-only: triggers reject UPDATE, DELETE and TRUNCATE for everyone, including
+  the owner. Consequence: a game with events can't be deleted. That's intended.
+- RLS is enabled on every table from the start (test asserts it). Policies come in step 6.
+- `supabase/seed.sql` holds **test helpers only** (schema `tests`): `create_user`, `login`,
+  `as_anon`, `as_postgres`, `game_fixture`, `event`. Seeds never run on hosted projects.
+  - `tests.login` sets `role` + `request.jwt.claims`, the same thing PostgREST does, so RLS and
+    `auth.uid()` behave as they do for real requests.
