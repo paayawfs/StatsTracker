@@ -77,15 +77,26 @@ export class SimNetwork {
     return durable.seq;
   }
 
+  /** Run at most n queued deliveries (for observing in-flight states). */
+  async step(n: number) {
+    for (let i = 0; i < n && this.queue.length; i++) await this.runNext();
+    await flushMicrotasks();
+  }
+
+  private async runNext() {
+    await flushMicrotasks();
+    this.queue.sort((a, b) => a.at - b.at || a.order - b.order);
+    const next = this.queue.shift()!;
+    this.now = Math.max(this.now, next.at);
+    next.run();
+  }
+
   /** Run virtual time until nothing is queued, letting promise callbacks run between steps. */
   async settle(maxSteps = 100_000) {
     for (let i = 0; i < maxSteps; i++) {
       await flushMicrotasks();
       if (!this.queue.length) return;
-      this.queue.sort((a, b) => a.at - b.at || a.order - b.order);
-      const next = this.queue.shift()!;
-      this.now = Math.max(this.now, next.at);
-      next.run();
+      await this.runNext();
     }
     throw new Error('network did not settle');
   }

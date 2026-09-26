@@ -71,6 +71,33 @@ export class GameLog {
     return from;
   }
 
+  /** The event as received (before corrections), if known. */
+  get(id: string): GameEvent | undefined {
+    return this.byId.get(id);
+  }
+
+  /**
+   * Drop an event the server refused. Only unconfirmed events can be discarded; the durable log
+   * is append-only. Returns the index replay started from, or -1 if nothing changed.
+   */
+  discard(id: string): number {
+    const e = this.byId.get(id);
+    if (!e || e.seq !== null) return -1;
+    this.byId.delete(id);
+    let from = this.remove(id);
+    if (isCorrection(e)) {
+      this.forget(this.corrections.get(e.payload.targetId) ?? [], id);
+      from = Math.min(from, this.refresh(e.payload.targetId));
+    }
+    if (e.type === 'adminLock') {
+      this.forget(this.locks, id);
+      for (const target of this.corrections.keys()) from = Math.min(from, this.refresh(target));
+    }
+    if (from === Infinity) return -1;
+    this.replayFrom(from);
+    return from;
+  }
+
   /** Corrections currently in force for an event, oldest first; the last one wins. */
   correctionsFor(id: string): Correction[] {
     return (this.corrections.get(id) ?? []).filter((c) => this.applies(c)).sort(compareWrites);

@@ -390,3 +390,28 @@ Assumptions stated at the start of the phase:
   unconfirmed one. `put(e, reason)` marks an event rejected; it stays for admin review.
 - Tests use `fake-indexeddb` (dev only), including 200 un-awaited writes landing in order.
 - Requesting persistent storage (`navigator.storage.persist()`) is the app's job (Phase 4).
+
+### Step 3: GameSync
+
+- `game-sync.ts`: one game on one device. `GameSync.open({gameId, deviceId, transport, store})`
+  loads everything stored for the game into a `GameLog` (so offline reloads work), rebuilds the
+  outbox (own `seq: null` events, in `deviceSeq` order) and connects.
+- `record(e)`, the tap path, in this order:
+  1. `log.add(e)` + `onChange()` (render; synchronous);
+  2. `store.put(e)` (not awaited);
+  3. push to outbox, fast-path `broadcast`;
+  4. `flush()` (durable path, async).
+- `flush()` sends the outbox **one event at a time, in order**. On success it applies the durable
+  copy. On `Rejected` it drops the event from the outbox, marks it rejected in the store, discards
+  it from the log, broadcasts `discard` to peers and calls `onRejected`. On `NetworkError` it stops
+  and retries after `retryMs`, or sooner on the next `online` / tap.
+- A durable copy of our own event from any source (RPC reply, server broadcast, catch-up)
+  confirms it and removes it from the outbox. That covers the lost-ack case.
+- Incoming events are untrusted: `parseEvent`, then ignore other games.
+- `nextDeviceSeq()`: highest own `deviceSeq` seen (including stored and rejected) + 1.
+- `now()`: local clock + `clockOffset`, measured on every reconnect from one `serverTime()` round
+  trip (midpoint). The UI should use it for `wallClock` and the running game clock.
+- Timers are injectable (`setTimer`) so simulated tests run retries in virtual time.
+- core gained `GameLog.get(id)` and `GameLog.discard(id)`. `discard` refuses durable events; the
+  durable log stays append-only.
+- Mutation-checked: removing "durable copy confirms pending" or the `discard` broadcast fails tests.

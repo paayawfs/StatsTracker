@@ -111,3 +111,42 @@ describe('GameLog', () => {
     expect(g.events).toEqual([durable]);
   });
 });
+
+describe('GameLog.discard', () => {
+  test('removes an unconfirmed event and replays', () => {
+    const g = new GameLog();
+    const local = shot({ seq: null });
+    for (const e of [gameStart(), periodStart(), local]) g.add(e);
+    expect(g.state.score.A).toBe(2);
+    expect(g.discard(local.id)).toBe(2);
+    expect(g.state.score.A).toBe(0);
+    expect(g.get(local.id)).toBeUndefined();
+  });
+
+  test('never removes a durable event', () => {
+    const g = new GameLog();
+    const durable = shot({ seq: 3 });
+    g.add(durable);
+    expect(g.discard(durable.id)).toBe(-1);
+    expect(g.events).toEqual([durable]);
+  });
+
+  test('discarding an unconfirmed correction restores its target', () => {
+    const g = new GameLog();
+    const s = shot({ gameClock: 500_000 });
+    const v = ev('void', { targetId: s.id }, { gameClock: 100_000, seq: null });
+    for (const e of [gameStart(), periodStart(), s, v]) g.add(e);
+    expect(g.state.score.A).toBe(0);
+    g.discard(v.id);
+    expect(g.state.score.A).toBe(2);
+    expect(g.correctionsFor(s.id)).toEqual([]);
+  });
+
+  test('a discarded id can arrive again later (e.g. durable after all)', () => {
+    const g = new GameLog();
+    const local = shot({ seq: null });
+    g.add(local);
+    g.discard(local.id);
+    expect(g.add({ ...local, seq: 9 })).toBe(0);
+  });
+});
