@@ -279,3 +279,20 @@ Steps 2-5 were written while the images pulled and first run together (47 pgTAP 
 Failures on the first run were test-helper bugs (`tests.login` reading `auth.users` as
 `authenticated`; test 02 predating role claims; a missing `::text` cast), not migration bugs.
 All 47 pass.
+
+### Step 6: RLS
+
+- League admins: full access to their league's rows (leagues, admins, rule sets, seasons, teams,
+  players, games, rosters). They can read codes, scorers, roles and events.
+- Scorers (anonymous users in `game_scorers`): read-only access to their game, its roster, rule
+  set, team and player names, role claims and events. Nothing else.
+- Nobody inserts into `events`, `game_codes`, `game_scorers` or `role_claims` directly: those go
+  through `insert_event`, `create_game_code`, `join_game`, `revoke_game_code`.
+- `create_league(name)`: any non-anonymous account; the creator becomes admin. It's a function
+  rather than an insert policy + trigger because `insert ... returning` would fail RLS before the
+  trigger made the creator an admin.
+- `game_events(game, after_seq)`: reconnect catch-up in core JSON shape, under RLS.
+- `anon` still has Supabase's default table grants; RLS hides every row (tested). Public viewers
+  use the slug functions in step 7.
+- **Bug caught by tests:** unqualified `id` inside a policy subquery bound to the subquery's table
+  (`games.id`) instead of the policy's table. Always qualify (`teams.id`) in policy subqueries.
