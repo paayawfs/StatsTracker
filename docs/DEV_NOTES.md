@@ -239,3 +239,26 @@ validation as data-quality flags, and corrections with last-write-wins.
 - The client's `seq` is ignored; the server's is canonical.
 - `event_json(row)` turns a row back into the core `GameEvent` shape (camelCase).
 - Test 02 claims the `single` role first because it runs with step 4's authority rules.
+
+### Step 4: role authority
+
+- `authorize_event(game, event)` enforces brief sections 6 and 7:
+  - `admin` role: league admins only; may write anything, including after the lock.
+    `adminLock` sets `games.locked_at`.
+  - After the lock, everything else is rejected.
+  - `single` role only in single-mode games; `teamA`/`teamB`/`clock` only in multi mode.
+  - `roleClaim`: the primary key on `role_claims` makes claims exclusive; a second claim -> `23505`.
+  - Every other event: caller must hold `event.role`.
+  - `roleRelease`: caller must hold the released role.
+  - `roleTransfer`: **any role holder may move any role to any joined device.** This is how a dead
+    device's role is taken over. It's an event, so it's auditable. Confirm in Phase 5.
+  - `amend`, `void`, `checkpoint`: any scorer role.
+  - Ownership: game control (incl. timeouts, jump balls) -> `clock` if claimed, else `teamA`;
+    substitution/rebound/turnover/foul -> `team<payload.team>`; shot/free throw -> team of the
+    shooter from `game_roster`.
+- Known edges:
+  - A shooter not in `game_roster` (added late via a `gameStart` amend) can't be attributed, so any
+    team role may write it. core still flags it.
+  - **Offline outbox after a role transfer:** events recorded offline while holding a role are
+    rejected if the role moved before they were flushed. Phase 3 must keep rejected events visible
+    (not silently dropped) for an admin to re-enter.
