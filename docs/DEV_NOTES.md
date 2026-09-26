@@ -338,3 +338,18 @@ broadcast trigger with private scorer and viewer channels, public slug functions
 - Open decisions for Phase 5: role transfer by any role holder; offline events rejected after a
   role moved.
 - JSON Schema can't express valibot's cross-field checks; those remain client-side.
+
+### Hosted project
+
+- Project `StatsTracker`, ref `uulqbabkuqgumljonupy`, region **eu-west-2 (London)**. Chosen
+  before measuring from Accra; the project is still near-empty, so recreating elsewhere is cheap
+  if MTN/Telecel measurements favour another region.
+- Linked with `pnpm exec supabase link --project-ref uulqbabkuqgumljonupy` (run in a real
+  terminal: login and link are interactive; keep the token and DB password out of the repo).
+- All 7 migrations pushed with `pnpm exec supabase db push` (2026-09-26). `seed.sql` is never
+  pushed: it only holds local pgTAP helpers.
+- Checked live with the anon key: `public_game` answers anon (null for an unknown slug), `events`
+  returns no rows to anon, `insert_event` is refused for anon.
+- **Manual setting:** anonymous sign-ins are enabled in the dashboard (Authentication -> Sign In /
+  Providers). `config.toml` auth settings do not sync automatically.
+- Deploying schema changes: new migration -> `pnpm exec supabase db push`.
