@@ -46,6 +46,9 @@ importers:
       '@supabase/supabase-js':
         specifier: ^2.117.2
         version: 2.117.2
+      '@types/node':
+        specifier: ^26.6.3
+        version: 26.6.3
       fake-indexeddb:
         specifier: ^6.2.5
         version: 6.2.5

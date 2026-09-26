@@ -453,3 +453,55 @@ Assumptions stated at the start of the phase:
 - Tests: two scorers amend the same shot concurrently; both converge on the higher-seq amend and
   both are notified with it as winner; no notification for single-device corrections; no repeat
   notifications from confirmations.
+
+### Step 6: SupabaseTransport
+
+- `supabase.ts`: `SupabaseTransport(client, gameId)`.
+  - Fast path: `channel('game:<id>', { private: true, broadcast: { self: false } })`, events
+    `event` and `discard`. Status: `SUBSCRIBED` -> online, anything else -> offline (realtime-js
+    rejoins by itself, and the next `SUBSCRIBED` triggers catch-up + flush).
+  - Durable: `rpc('insert_event')`. Catch-up: `rpc('game_events')`, paged in 1000s (PostgREST's
+    default row cap). Clock: `rpc('server_now')` (new migration `20260927090000_server_now`).
+  - Error classification: HTTP 4xx except 401/408/429 -> `Rejected` (keeps the Postgres code);
+    everything else (no response, 5xx, expired token) -> `NetworkError` (retry).
+- `supabaseClientOptions` = `{ realtime: { heartbeatIntervalMs: 5000 } }`: pass to `createClient`
+  on scorer devices (brief: heartbeat every few seconds keeps cellular radios awake).
+- `GameSync.onPeerLatency(eventId, ms)`: tap-to-receipt for a peer's fast-path event, computed
+  as `now() - event.wallClock`. Both clocks are server-corrected, so the UI must stamp
+  `wallClock` with `sync.now()`. Storing and showing samples is Phase 7.
+- **Integration test** (`supabase.integration.test.ts`, runs in `pnpm test`, skips with a
+  visible warning if local Supabase is down): real admin account, league, teams, players, game,
+  code; two anonymous scorers join and claim teamA/teamB; record through `GameSync`; both
+  converge; a teamA device writing a teamB shot is rejected by the real server and pulled back
+  from B; a third device joining late catches up; `public_events` by slug matches. Local: peer
+  fast-path latency 1-5 ms, clock offset < 1 s.
+- Event stamping note: pregame session events (role claims) should use period 0 so they sort
+  before `gameStart` in canonical order. Phase 4's event builder does this.
+
+## Phase 3 report
+
+**Built:** `packages/sync`: `SyncTransport` (the one abstraction), `SupabaseTransport`,
+IndexedDB `LocalStore` (log + outbox + rejected), `GameSync` (tap path, ordered durable flush,
+confirmations, rejection pull-back, catch-up on reconnect / gap / 10 s poll, server clock offset,
+conflict notifications, peer latency hook), deterministic network simulator. Core gained
+`GameLog.get` and `GameLog.discard` (unconfirmed only). Supabase gained `server_now()`.
+
+**Verified (`pnpm test`: core 137, sync 46; `supabase test db`: 83):**
+- Simulator self-tests; LocalStore semantics on fake IndexedDB.
+- GameSync: synchronous local apply, outbox ordering, offline reload, lost acks, rejection
+  pull-back on all devices, untrusted input ignored.
+- Property tests: 2 and 3 clients under latency, drops, duplicates, lost acks and outages always
+  converge to the server log, with every tap stored exactly once (60 runs each; soaked at 500).
+- Concurrent amendments: last write wins by seq on every device; both scorers notified; no
+  repeat notifications.
+- Mutation checks on confirmation, discard, poll, reconnect catch-up and outbox loss.
+- Live integration against local Supabase: two and three real clients, real RLS/authority
+  rejection, Realtime private channels, catch-up, public read.
+
+**Not verified / open:**
+- Nothing measured over a real cellular network yet. Local latencies say nothing about Accra ->
+  London.
+- `server_now` migration not yet pushed to the hosted project.
+- Behaviour when the anonymous session's token expires mid-game relies on supabase-js
+  auto-refresh; classified as retryable, but not exercised.
+- Bundle size of supabase-js is measured in Phase 4.

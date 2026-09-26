@@ -35,6 +35,8 @@ export class GameSync {
   onRejected: (event: GameEvent, reason: string) => void = () => {};
   /** Two or more devices corrected the same event. `corrections` is oldest first; the last wins. */
   onConflict: (targetId: string, corrections: EventOf<'amend' | 'void'>[]) => void = () => {};
+  /** Tap-to-receipt time for a peer's fast-path event (both clocks server-corrected). */
+  onPeerLatency: (eventId: string, ms: number) => void = () => {};
 
   private readonly transport: SyncTransport;
   private readonly store: LocalStore;
@@ -116,7 +118,9 @@ export class GameSync {
   private receive(raw: unknown) {
     const parsed = parseEvent(raw);
     if (!parsed.success || parsed.output.gameId !== this.gameId) return;
-    this.apply(parsed.output);
+    const e = parsed.output;
+    if (e.seq === null && e.deviceId !== this.deviceId && !this.log.get(e.id)) this.onPeerLatency(e.id, this.now() - e.wallClock);
+    this.apply(e);
   }
 
   private apply(e: GameEvent) {
