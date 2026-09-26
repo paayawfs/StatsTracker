@@ -67,3 +67,26 @@ These override the original build brief where they differ.
     in one correction. Only play events can be amended. Corrections and session events cannot.
 - `test-helpers.ts` `ev()` builds events with defaults: every call advances `seq`, `deviceSeq`
   and counts `gameClock` down, so events built in order are already in canonical order.
+
+### Step 3: reducer
+
+- `reducer.ts`: `GameState`, `initialState`, `apply(state, event)`, `replay(log)`, `teamFoulCount`.
+- `apply` is pure and incremental: one event in, new state out. It `structuredClone`s the ~1 KB
+  state per event. Good enough (a 1000-event replay is milliseconds); swap for structural sharing
+  only if profiling shows it. `core` declares `structuredClone` itself in `globals.d.ts` because it
+  compiles without DOM/Node types.
+- `replay` folds an **already ordered and resolved** log (ordering + corrections come in steps 4
+  and 6). It skips duplicate ids.
+- State kept is what validation and the scorer UI need: score, on-floor, personal fouls, team
+  fouls per period, timeouts per period, the free-throw queue, `reboundable`, possession arrow,
+  roles, clock, lock. Box-score stats are Phase 6 and will be derived from the log, not stored here.
+- Free-throw queue: a foul with `freeThrows > 0` queues `{team, shooter, next, of}` for the fouled
+  player (`shooter: null` for technicals = anyone on that team). FTs advance it; `periodEnd` clears it.
+- Clock: the reducer only stores the last start/stop (`gameClock` + `wallClock`). The live running
+  time is `gameClock - (now - wallClock)`, computed by the UI with the server-time offset.
+- Only player fouls count toward team fouls, filtered by `rules.teamFoulKinds`. Coach/bench fouls
+  don't count as personal fouls either. Coach technical limits (FIBA: 2 C or 3 B+C) are not
+  modelled yet.
+- Property tests use `arbGameLog` (random, structurally valid, not rule-valid logs). Gotcha: a
+  fast-check property that returns a falsy value fails, so use block bodies around `expect`.
+- Checked the duplicate-id property test by temporarily removing dedupe: it fails as it should.
