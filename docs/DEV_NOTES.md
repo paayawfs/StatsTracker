@@ -35,3 +35,14 @@ These override the original build brief where they differ.
 - `core` has no build step: it exports `src/index.ts` directly; Vite and Vitest consume TS source.
 - `core` compiles with `lib: ES2022` and `types: []` so no DOM or Node API can leak into pure code.
 - Commands: `pnpm test` and `pnpm typecheck` from the repo root.
+
+### Step 1: rule sets
+
+- `rules.ts`: `RuleSetSchema` (valibot), `FIBA` and `NBA` presets, `periodLength`, `timeoutsAllowed`.
+- Timeouts are modelled as windows: `{ periods: [1, 2], count: 2 }`. A period not in any window is
+  overtime and gets `overtimeTimeouts` for itself alone.
+- `teamFoulKinds` lists which player foul kinds count toward the team foul total. NBA excludes
+  offensive and technical fouls. **Verify against the current NBA rulebook before relying on it.**
+- `overtimeCarriesLastPeriod`: FIBA counts overtime team fouls as part of the 4th period.
+- Not modelled (deliberately): FIBA's last-2-minutes timeout cap, NBA's 4th-quarter timeout limits
+  and last-2-minutes bonus rule. Add if a league needs them.
