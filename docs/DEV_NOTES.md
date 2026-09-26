@@ -378,3 +378,15 @@ Assumptions stated at the start of the phase:
   rejections. `await net.settle()` runs virtual time until quiet.
 - Gotcha: a promise that rejects inside `settle()` before a handler is attached shows up as an
   unhandled rejection in Vitest. Capture with `.catch(e => e)` before settling.
+
+### Step 2: LocalStore
+
+- `store.ts`: IndexedDB via `idb` (~1 KB). One object store `events`, keyed by `event.id`,
+  indexed by `event.gameId`, holding `{ event, rejected? }`.
+- It holds **every** event the device knows for the game, its own and peers', so a reload
+  mid-game while offline rebuilds full state. The outbox is not a separate store: it's this
+  device's events with `seq === null` and no `rejected`.
+- `put` follows the same rule as `GameLog`: a durable copy is never overwritten by an
+  unconfirmed one. `put(e, reason)` marks an event rejected; it stays for admin review.
+- Tests use `fake-indexeddb` (dev only), including 200 un-awaited writes landing in order.
+- Requesting persistent storage (`navigator.storage.persist()`) is the app's job (Phase 4).
