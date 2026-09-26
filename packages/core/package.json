@@ -5,12 +5,15 @@
   "exports": "./src/index.ts",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:event-schema": "vitest run src/event-schema.test.ts --mode write-schema"
   },
   "dependencies": {
     "valibot": "^1.5.0"
   },
   "devDependencies": {
+    "@types/node": "^26.6.3",
+    "@valibot/to-json-schema": "^1.8.0",
     "fast-check": "^4.10.2",
     "typescript": "^7.0.2",
     "vitest": "^5.0.2"

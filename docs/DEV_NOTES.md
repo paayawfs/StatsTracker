@@ -186,3 +186,28 @@ validation as data-quality flags, and corrections with last-write-wins.
 - Not modelled: FIBA/NBA end-of-game timeout and bonus specials, coach technical limits,
   ownership/role authority (server-side, Phase 2), derived stats (Phase 6).
 - Validation doesn't flag rebound kind vs team mismatch (e.g. "offensive" rebound by the defence).
+
+## Phase 2: Supabase
+
+### Step 1: local setup and event JSON Schema
+
+- Supabase CLI is a root dev dependency (`pnpm exec supabase ...`). Runs on Rancher Desktop (dockerd).
+- `supabase/config.toml`: anonymous sign-ins on; Studio, Storage, edge functions, analytics and the
+  mail catcher off. Start with only what we use (images are big, the network is slow):
+
+  ```
+  pnpm exec supabase start -x postgres-meta,supavisor,imgproxy,vector,logflare,studio,mailpit,storage-api,edge-runtime
+  pnpm exec supabase db reset   # re-apply migrations + seed
+  pnpm exec supabase test db    # pgTAP tests in supabase/tests
+  ```
+
+- **Event validation on the server uses the same valibot schema as the client.**
+  `@valibot/to-json-schema` turns `EventSchema` into JSON Schema; Postgres checks it with
+  `pg_jsonschema`. The JSON lives in a generated migration (`*_event_schema.sql`, function
+  `event_json_schema()`).
+  - `packages/core/src/event-schema.test.ts` fails if the newest `*_event_schema.sql` doesn't match
+    `EventSchema`. Fix: `pnpm --filter @stats/core db:event-schema`, which writes a **new** migration
+    (migrations are immutable once applied).
+  - Cross-field `v.check`s (assist only on a make, etc.) don't translate to JSON Schema; they stay
+    client-side, and core flags or rejects them on parse.
+  - The JSON Schema does not forbid unknown keys (valibot strips them on the client).
