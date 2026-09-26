@@ -438,3 +438,18 @@ Assumptions stated at the start of the phase:
   Silently dropping an outbox event on a network error fails both convergence properties.
 - Speed: the simulator yields with `setImmediate` where available. `setTimeout(0)` is clamped to
   >= 1 ms and made the suite take 172 s instead of under 1 s.
+
+### Step 5: concurrent amendments
+
+- Last-write-wins comes from core (`GameLog`, by server `seq`; an unconfirmed local correction
+  ranks last until confirmed). `GameSync` adds the notification.
+- `onConflict(targetId, corrections)` fires when corrections from **two or more devices** compete
+  for one event, **once when the conflict appears and again only if the winner changes** (e.g.
+  when confirmations reorder an unconfirmed local amend). Confirmations that don't change the
+  winner don't re-notify. A device correcting its own work never notifies.
+- `corrections` is oldest-first; the last one is the winner. The UI (Phase 5) shows "X changed
+  this to Y".
+- Checked on both the tap path (`record`) and the receive path.
+- Tests: two scorers amend the same shot concurrently; both converge on the higher-seq amend and
+  both are notified with it as winner; no notification for single-device corrections; no repeat
+  notifications from confirmations.

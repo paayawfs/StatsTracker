@@ -47,6 +47,8 @@ export class GameSync {
   /** Highest seq with every seq up to it received. Catch-up fetches after this. */
   private contiguous = 0;
   private ahead = new Set<number>();
+  /** Winning correction id last reported per conflicted target. */
+  private notifiedWinner = new Map<string, string>();
   private flushing = false;
   private catchingUp = false;
   private retryScheduled = false;
@@ -98,6 +100,7 @@ export class GameSync {
   record(e: GameEvent): void {
     this.deviceSeq = Math.max(this.deviceSeq, e.deviceSeq);
     this.log.add(e);
+    if (isCorrection(e)) this.checkConflict(e.payload.targetId);
     this.onChange();
     void this.store.put(e);
     this.pending.push(e);
@@ -128,9 +131,14 @@ export class GameSync {
     this.onChange();
   }
 
+  /** Notify when corrections from 2+ devices compete, and again only if the winner changes. */
   private checkConflict(targetId: string) {
     const corrections = this.log.correctionsFor(targetId);
-    if (new Set(corrections.map((c) => c.deviceId)).size > 1) this.onConflict(targetId, corrections);
+    const winner = corrections.at(-1);
+    if (!winner || new Set(corrections.map((c) => c.deviceId)).size < 2) return;
+    if (this.notifiedWinner.get(targetId) === winner.id) return;
+    this.notifiedWinner.set(targetId, winner.id);
+    this.onConflict(targetId, corrections);
   }
 
   private discard(id: string) {
