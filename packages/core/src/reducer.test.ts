@@ -1,7 +1,8 @@
 import fc from 'fast-check';
 import { describe, expect, test } from 'vitest';
 import type { GameEvent } from './events';
-import { apply, initialState, replay, teamFoulCount, type GameState } from './reducer';
+import { apply, initialState, replay, type GameState } from './reducer';
+import { teamFoulCount } from './validate';
 import { FIBA, NBA } from './rules';
 import { arbGameLog, ev, gameStart, periodStart } from './test-helpers';
 

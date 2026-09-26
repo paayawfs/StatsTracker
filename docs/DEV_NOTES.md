@@ -107,3 +107,33 @@ These override the original build brief where they differ.
   checkpoints every N events instead if it ever matters.
 - Insertion scans from the end because nearly every event lands at or near the end.
 - Property test: any arrival permutation of a canonical log produces the identical log and state.
+
+### Step 5: validation as flags
+
+- `validate.ts`: `check(stateBefore, event) -> Flag[]`, `teamFoulCount`, `dataQuality`.
+- `apply` calls `check` on every event and appends to `state.flags`. So validation runs wherever
+  the reducer runs (client, server-side readers, export), and there is still only one implementation.
+- Flag codes (`{ eventId, code, detail? }`):
+
+  | code | when |
+  |---|---|
+  | `no-game-start` | play event before `gameStart` |
+  | `unknown-player` / `wrong-team` / `not-on-floor` | player checks on every involved player |
+  | `fouled-out` | player at the foul limit acts, is subbed in, or starts a period |
+  | `lineup-size` | a team does not have exactly 5 after `periodStart` or a substitution |
+  | `bad-substitution` | out-player not on floor, in-player already on floor or on the other team |
+  | `rebound-without-miss` | no missed shot / missed last FT before it |
+  | `unexpected-free-throw` / `free-throw-order` | FT no one is owed / wrong attempt number |
+  | `free-throw-count` | foul's FT count doesn't match kind + bonus + rule set |
+  | `free-throws-unfinished` | `periodEnd` with FTs still owed |
+  | `timeouts-exceeded` | more than the window allows |
+  | `role-held` | claim of a role another device holds (the claim is also not applied) |
+  | `score-mismatch` | `checkpoint` differs from the computed score |
+  | `missing-location` | shot without x/y when the game has shot locations on |
+  | `locked-correction` | non-admin `amend`/`void` after `adminLock` |
+
+- FT-count rules: personal = bonus FTs if the team was already at the threshold, else 0; offensive
+  = 0; technical = `rules.technicalFreeThrows`; shooting/unsportsmanlike/disqualifying = at least 1.
+- **Bug found by property test (fixed):** `arbGameLog` reset the clock to 10:00 in overtime
+  instead of 5:00, so generated OT logs weren't canonical and the arrival-order property failed on
+  rare runs. The fix was in the generator. `GameLog` was right. A 3000-run soak passes.

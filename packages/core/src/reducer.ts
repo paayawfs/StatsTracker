@@ -1,4 +1,5 @@
 import type { GameEvent, Role, Team } from './events';
+import { check } from './validate';
 import { periodLength, type RuleSet } from './rules';
 
 export interface Flag {
@@ -65,21 +66,12 @@ const bump = (m: Record<string | number, number>, k: string | number) => {
   m[k] = (m[k] ?? 0) + 1;
 };
 
-/** Team fouls that count toward the bonus in the current period. */
-export function teamFoulCount(s: GameState, team: Team): number {
-  const r = s.rules;
-  const fouls = s.teamFouls[team];
-  if (!r || s.period <= r.periods || !r.teamFoulBonus.overtimeCarriesLastPeriod) return fouls[s.period] ?? 0;
-  let total = fouls[r.periods] ?? 0;
-  for (let p = r.periods + 1; p <= s.period; p++) total += fouls[p] ?? 0;
-  return total;
-}
-
 /** Apply one event. Pure: returns a new state and never mutates `state`. */
 export function apply(state: GameState, e: GameEvent): GameState {
   // ponytail: whole-state clone per event (~1 KB). Swap for structural sharing if profiling says so.
   const s = structuredClone(state);
   const r = s.rules;
+  s.flags.push(...check(state, e));
 
   switch (e.type) {
     case 'gameStart': {
@@ -157,7 +149,7 @@ export function apply(state: GameState, e: GameEvent): GameState {
       break;
     }
     case 'roleClaim':
-      s.roles[e.payload.role] = e.deviceId;
+      s.roles[e.payload.role] ??= e.deviceId;
       if (e.payload.role === 'clock') s.clockRoleSeen = true;
       break;
     case 'roleRelease':

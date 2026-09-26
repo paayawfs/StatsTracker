@@ -80,7 +80,7 @@ export const arbGameLog: fc.Arbitrary<GameEvent[]> = fc
           log.push(ev('periodEnd', {}, { period, gameClock: 0 }));
           period++;
           log.push(periodStart(period));
-          clock = FIBA.periodLengthMs;
+          clock = period > FIBA.periods ? FIBA.overtimeLengthMs : FIBA.periodLengthMs;
           break;
       }
     }
