@@ -46,3 +46,24 @@ These override the original build brief where they differ.
 - `overtimeCarriesLastPeriod`: FIBA counts overtime team fouls as part of the 4th period.
 - Not modelled (deliberately): FIBA's last-2-minutes timeout cap, NBA's 4th-quarter timeout limits
   and last-2-minutes bonus rule. Add if a league needs them.
+
+### Step 2: event schemas
+
+- `events.ts`: one valibot schema per event type. `EventSchema = Envelope ∩ Body`, where Body is
+  a nested `variant` on `type` over three groups: play (game control, subs, shots, FTs, rebounds,
+  turnovers, fouls), corrections (`amend`, `void`), session (role claim/release/transfer,
+  `checkpoint`, `adminLock`).
+- `parseEvent(input)` is the boundary check. Use it on everything from network, storage or import.
+- Schema rejects only structural nonsense (assist on a miss, block on a make, x without y,
+  attempt 3 of 2, coach "personal" foul). Anything that depends on game state is a flag (step 5).
+- Choices worth knowing:
+  - Shot and free throw have no `team`: it is derived from the shooter via the roster.
+  - `gameStart` carries the rule set, both rosters and the shot-location setting, so the event log
+    is self-contained for export and replay. A late roster addition = amend the `gameStart`.
+  - Team rebound / team turnover = omit `player`.
+  - A technical foul's free throws have no `fouled` player; the shooter is chosen at the line.
+  - Shot `x`/`y` are normalised 0..1. The court mapping is decided with the shot chart (Phase 6).
+  - `amend` replaces the target's whole body (type and payload), so a mis-typed event can be fixed
+    in one correction. Only play events can be amended. Corrections and session events cannot.
+- `test-helpers.ts` `ev()` builds events with defaults: every call advances `seq`, `deviceSeq`
+  and counts `gameClock` down, so events built in order are already in canonical order.
