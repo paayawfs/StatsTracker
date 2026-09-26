@@ -262,3 +262,20 @@ validation as data-quality flags, and corrections with last-write-wins.
   - **Offline outbox after a role transfer:** events recorded offline while holding a role are
     rejected if the role moved before they were flushed. Phase 3 must keep rejected events visible
     (not silently dropped) for an admin to re-enter.
+
+### Step 5: game codes
+
+- `create_game_code(game, valid_for = 1 day)`: admins only. 8 characters from a 32-letter
+  alphabet with no 0/O/1/I (~10^12 codes), so there's no attempt limiter.
+- `join_game(code, device_id) -> game_id`: after `signInAnonymously()`. Rejects unknown, expired,
+  revoked codes and locked games. Case-insensitive. Re-joining updates the device id.
+- `revoke_game_code(code)`: marks it revoked, removes every scorer who joined with it and their
+  role claims.
+- Local auth allows 30 anonymous sign-ins per hour per IP (config.toml). Fine for one venue.
+
+### Verification note (steps 2-5)
+
+Steps 2-5 were written while the images pulled and first run together (47 pgTAP tests).
+Failures on the first run were test-helper bugs (`tests.login` reading `auth.users` as
+`authenticated`; test 02 predating role claims; a missing `::text` cast), not migration bugs.
+All 47 pass.
