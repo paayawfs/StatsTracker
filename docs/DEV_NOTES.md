@@ -296,3 +296,45 @@ All 47 pass.
   use the slug functions in step 7.
 - **Bug caught by tests:** unqualified `id` inside a policy subquery bound to the subquery's table
   (`games.id`) instead of the policy's table. Always qualify (`teams.id`) in policy subqueries.
+
+### Step 7: broadcast and public read
+
+- After-insert trigger on `events` calls `realtime.send` with the core-shaped event on two
+  **private** channels:
+  - `game:<gameId>` for scorers and admins: they can read (durable confirmations, with `seq`) and
+    send (the client fast path in Phase 3).
+  - `view:<slug>` for public viewers: read-only, for anyone (including `anon`) who knows an existing
+    slug. It's private rather than public because on a public Realtime channel any client can
+    send, so a viewer could inject fake events for other viewers.
+- Channel authorization = RLS policies on `realtime.messages` using `realtime.topic()`.
+- `public_game(slug)` (teams, rules, roster names, lock) and `public_events(slug, after_seq)` for
+  viewers' first load and catch-up. Viewers have no table access.
+- Not batched for viewers (decision 7). Revisit if viewer counts grow.
+- Clients must subscribe with `{ config: { private: true } }`, after `supabase.realtime.setAuth()`
+  for signed-in scorers.
+
+## Phase 2 report
+
+**Built:** Supabase schema (12 tables, append-only `events`), generated event JSON Schema enforced
+with `pg_jsonschema`, `insert_event` (schema, membership, idempotent resend, role authority,
+ownership, lock, atomic per-game `seq`), game codes (create/join/revoke), RLS on every table,
+broadcast trigger with private scorer and viewer channels, public slug functions, local dev setup.
+
+**Verified:**
+- 81 pgTAP tests (`pnpm exec supabase test db`) against local Supabase on Rancher, covering
+  append-only, seq, idempotency, schema rejection, every ownership rule, exclusive claims,
+  transfer, lock, codes, RLS per role (admin, scorer, outsider, anon, account), broadcast topics
+  and payloads, channel authorization.
+- 133 core tests, including the schema-drift test.
+- End-to-end smoke with supabase-js against the running stack (script kept out of the repo):
+  anonymous sign-in -> `join_game` -> private channel subscribe (outsider refused by the real
+  Realtime server) -> `insert_event` -> both scorer and viewer channels receive the durable event.
+  Locally: RPC ~10 ms, broadcast received ~10 ms after the call.
+
+**Not verified / open:**
+- Concurrency of seq assignment under parallel writers is by design (row lock) but not
+  load-tested. Phase 3's multi-client sync tests should hammer it.
+- No hosted project yet; region still to be chosen from Accra measurements (MTN, Telecel).
+- Open decisions for Phase 5: role transfer by any role holder; offline events rejected after a
+  role moved.
+- JSON Schema can't express valibot's cross-field checks; those remain client-side.
