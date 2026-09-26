@@ -353,3 +353,28 @@ broadcast trigger with private scorer and viewer channels, public slug functions
 - **Manual setting:** anonymous sign-ins are enabled in the dashboard (Authentication -> Sign In /
   Providers). `config.toml` auth settings do not sync automatically.
 - Deploying schema changes: new migration -> `pnpm exec supabase db push`.
+
+## Phase 3: `packages/sync`
+
+Assumptions stated at the start of the phase:
+- A server-rejected event that was already fast-path broadcast is pulled back: the writer
+  broadcasts `discard`, and peers drop it if it's still unconfirmed. The writer keeps it in its
+  local store marked rejected, for admin review. The durable log is never affected.
+- Peer broadcasts are untrusted input and pass through `parseEvent`.
+- `@supabase/supabase-js` is a type-level/dev dependency of `sync`. The scorer app creates the
+  client, so the bundle-size choice (full supabase-js vs. its sub-packages) is made and measured
+  in Phase 4.
+
+### Step 1: SyncTransport and the simulated network
+
+- `transport.ts`: the one required abstraction. `connect(handlers)`, `broadcast(message)`
+  (fast path, fire-and-forget), `persist(event) -> seq` (durable), `fetchSince(seq)`,
+  `serverTime()`, `close()`. Errors: `Rejected` (don't retry) vs `NetworkError` (retry; resends
+  are idempotent).
+- Peer messages: `{kind: 'event'}` or `{kind: 'discard', eventId}`.
+- `sim.ts`: `SimNetwork` + `SimTransport`, a deterministic in-memory backend: seeded PRNG,
+  virtual time, per-message latency range, drop and duplicate probability, lost acks (server
+  applied, response lost), per-client online/offline, and a `rejectIf` hook for authority
+  rejections. `await net.settle()` runs virtual time until quiet.
+- Gotcha: a promise that rejects inside `settle()` before a handler is attached shows up as an
+  unhandled rejection in Vitest. Capture with `.catch(e => e)` before settling.

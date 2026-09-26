@@ -1,0 +1,21 @@
+{
+  "name": "@stats/sync",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@stats/core": "workspace:*",
+    "idb": "^8.0.3"
+  },
+  "devDependencies": {
+    "@supabase/supabase-js": "^2.117.2",
+    "fake-indexeddb": "^6.2.5",
+    "fast-check": "^4.10.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.2"
+  }
+}
