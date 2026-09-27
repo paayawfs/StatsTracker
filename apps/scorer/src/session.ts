@@ -21,6 +21,8 @@ export interface Player {
   name: string;
   jersey: string;
   team: Team;
+  /** Small inline photo (data URL), if the admin added one. */
+  photo?: string | null;
 }
 /** Everything needed to score a game, cached so the app can resume offline. */
 export interface GameInfo {
@@ -88,7 +90,7 @@ async function loadInfo(gameId: string): Promise<GameInfo> {
   const g = await supabase.from('games').select('id, mode, shot_locations, team_a, team_b, rule_sets(rules)').eq('id', gameId).single();
   if (g.error) throw new Error(g.error.message);
   const teams = await supabase.from('teams').select('id, name').in('id', [g.data.team_a, g.data.team_b]);
-  const roster = await supabase.from('game_roster').select('player_id, team, jersey, players(name)').eq('game_id', gameId);
+  const roster = await supabase.from('game_roster').select('player_id, team, jersey, players(name, photo)').eq('game_id', gameId);
   if (teams.error || roster.error) throw new Error((teams.error ?? roster.error)!.message);
   const name = (id: string) => teams.data.find((t) => t.id === id)?.name ?? '';
   return {
@@ -98,7 +100,10 @@ async function loadInfo(gameId: string): Promise<GameInfo> {
     rules: (g.data.rule_sets as unknown as { rules: RuleSet }).rules,
     teams: { A: name(g.data.team_a), B: name(g.data.team_b) },
     players: roster.data
-      .map((r) => ({ id: r.player_id, team: r.team as Team, jersey: r.jersey, name: (r.players as unknown as { name: string }).name }))
+      .map((r) => {
+        const p = r.players as unknown as { name: string; photo: string | null };
+        return { id: r.player_id, team: r.team as Team, jersey: r.jersey, name: p.name, photo: p.photo };
+      })
       .sort((a, b) => a.team.localeCompare(b.team) || Number(a.jersey) - Number(b.jersey)),
   };
 }

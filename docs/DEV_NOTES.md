@@ -1063,3 +1063,21 @@ players as jersey chips in two side rails, one bottom dock for everything else.
   the section heat map with made/attempted labels.
 - e2e: the viewer test checks the stored shot is the top-3 reference point (x 0.5, y 0.75), not
   the raw tap, and the chart shows one "1/1" section.
+
+### Player names and photos
+
+- Starters screen: cards with avatar, jersey and full name (selected = team-colour outline +
+  check) instead of bare jersey circles. Live-scoring chips stay number-first.
+- `players.photo` (migration `20260928090000_player_photos`): small inline image (data URL,
+  must start with `data:image/`, <= 30 KB) so game info stays one request and photos work offline
+  on scoring devices. `public_game` returns it for viewers. pgTAP `09_player_photos` (5).
+  ponytail: move to Supabase Storage if full-size photos are ever needed.
+- `packages/ui`: `Avatar` (photo or initials on the team colour), `initials()` (tested),
+  `photoFromFile()` (centre-crop to 96x96 WebP in the browser, quality stepped down to fit).
+- Admin Teams & players: each player row has avatar + a Photo/Change button (file picker).
+- Viewer box score: small avatars next to names.
+- `dev:game` uses realistic names ("Kwame Asante", "Kofi Amoah", ...) and default jerseys.
+- e2e (admin journey): photo upload for Lions #4 -> the scorer's starter card for #4 shows it; #5
+  shows initials and full name.
+- Gotcha: Playwright `reuseExistingServer` silently tested a stale build while manual-test
+  preview servers were running on 4173/4174. Stop them (or rebuild) before running e2e.

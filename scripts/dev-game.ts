@@ -27,10 +27,11 @@ const league = must(await admin.rpc('create_league', { league_name: 'Demo League
 const rs = must(await admin.from('rule_sets').insert({ league_id: league, name: 'FIBA', rules: FIBA }).select('id').single()) as { id: string };
 const teams = must(await admin.from('teams').insert([{ league_id: league, name: 'Accra Lions' }, { league_id: league, name: 'Tema Tigers' }]).select('id, name')) as { id: string; name: string }[];
 
-const first = ['Kofi', 'Kwame', 'Yaw', 'Kojo', 'Kwesi', 'Kwaku', 'Ama', 'Akosua', 'Efua', 'Abena', 'Esi', 'Adwoa'];
+const first = ['Kwame', 'Kofi', 'Yaw', 'Kojo', 'Kwesi', 'Kwaku', 'Ama', 'Akosua', 'Efua', 'Abena', 'Esi', 'Adwoa'];
+const last = [['Asante', 'Mensah', 'Boateng', 'Owusu', 'Darko', 'Appiah', 'Ofori', 'Nti', 'Addo', 'Kyei', 'Quaye', 'Tetteh'], ['Amoah', 'Bonsu', 'Frimpong', 'Agyeman', 'Sarpong', 'Acheampong', 'Opoku', 'Antwi', 'Osei', 'Danquah', 'Lartey', 'Annan']];
 const game = must(await admin.from('games').insert({ league_id: league, team_a: teams[0]!.id, team_b: teams[1]!.id, rule_set_id: rs.id, mode, shot_locations: true }).select('id, public_slug').single()) as { id: string; public_slug: string };
 for (const [t, team] of teams.entries()) {
-  const players = must(await admin.from('players').insert(first.map((f, i) => ({ team_id: team.id, name: `${f} ${team.name.split(' ')[1]} ${i + 1}` }))).select('id')) as { id: string }[];
+  const players = must(await admin.from('players').insert(first.map((f, i) => ({ team_id: team.id, name: `${f} ${last[t]![i]}`, default_jersey: String(i + 4) }))).select('id')) as { id: string }[];
   must(await admin.from('game_roster').insert(players.map((p, i) => ({ game_id: game.id, player_id: p.id, team: t ? 'B' : 'A', jersey: String([4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15][i]) }))).select());
 }
 const code = must(await admin.rpc('create_game_code', { game: game.id })) as string;

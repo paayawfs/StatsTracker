@@ -1,11 +1,12 @@
 import { useSignal } from '@preact/signals';
 import { boxScore, describe, eventsCsv, FIBA, formatClock, NBA, seasonTotals, summarize, type GameEvent, type GameLog, type RuleSet } from '@stats/core';
 import type { ComponentChildren } from 'preact';
+import { Avatar, photoFromFile } from '@stats/ui';
 import { CsvImport } from './csv-import';
 import { useEffect } from 'preact/hooks';
 import {
   addAdmin, addPlayers, addSeason, addTeam, adminWrite, codes, createCode, createGame, createLeague, db, download, gameLog, gameRoster, games, latency,
-  leagues, parsePlayers, players, PUBLIC_URL, revokeCode, ruleSets, saveRuleSet, seasons, setJersey, teams, user,
+  leagues, parsePlayers, players, PUBLIC_URL, revokeCode, ruleSets, saveRuleSet, seasons, setJersey, setPhoto, teams, user,
   type GameRow, type League, type PlayerRow, type RuleSetRow, type Season, type TeamRow,
 } from './data';
 
@@ -209,20 +210,34 @@ function Teams({ league }: { league: League }) {
         {data.teams.map((t) => (
           <TeamCard key={t.id} team={t} players={data.players.filter((p) => p.team_id === t.id)} text={paste.value[t.id] ?? ''}
             onText={(s) => (paste.value = { ...paste.value, [t.id]: s })}
-            onAdd={() => act.run(() => addPlayers(t.id, parsePlayers(paste.value[t.id] ?? '')), () => ((paste.value = { ...paste.value, [t.id]: '' }), reload()))} />
+            onAdd={() => act.run(() => addPlayers(t.id, parsePlayers(paste.value[t.id] ?? '')), () => ((paste.value = { ...paste.value, [t.id]: '' }), reload()))}
+            onPhoto={(player, file) => act.run(async () => setPhoto(player, await photoFromFile(file)), reload)} />
         ))}
       </div>
     </section>
   );
 }
 
-function TeamCard({ team, players: ps, text, onText, onAdd }: { team: TeamRow; players: PlayerRow[]; text: string; onText: (s: string) => void; onAdd: () => void }) {
+function TeamCard({ team, players: ps, text, onText, onAdd, onPhoto }: { team: TeamRow; players: PlayerRow[]; text: string; onText: (s: string) => void; onAdd: () => void; onPhoto: (player: string, file: File) => void }) {
   const sorted = [...ps].sort((a, b) => Number(a.default_jersey ?? 999) - Number(b.default_jersey ?? 999));
   return (
     <article class="team-card" data-testid={`team-${team.name}`}>
       <h3>{team.name} <span class="small">{ps.length} players</span></h3>
       <ol class="roster-list">
-        {sorted.map((p) => <li key={p.id}><b>{p.default_jersey ?? '–'}</b> {p.name}</li>)}
+        {sorted.map((p) => (
+          <li key={p.id}>
+            <Avatar name={p.name} photo={p.photo} size={30} />
+            <b>{p.default_jersey ?? '–'}</b>
+            <span>{p.name}</span>
+            <label class="photo-btn" title={`Photo for ${p.name}`}>
+              {p.photo ? 'Change' : 'Photo'}
+              <input type="file" accept="image/*" aria-label={`Photo for ${p.name}`} onChange={(e) => {
+                const file = e.currentTarget.files?.[0];
+                if (file) onPhoto(p.id, file);
+              }} />
+            </label>
+          </li>
+        ))}
       </ol>
       <label for={`paste-${team.id}`} class="small">Add players, one per line: "23 Kofi Mensah"</label>
       <textarea id={`paste-${team.id}`} rows={4} value={text} onInput={(e) => onText(e.currentTarget.value)} />

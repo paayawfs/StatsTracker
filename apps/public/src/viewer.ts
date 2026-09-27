@@ -14,7 +14,7 @@ export interface PublicGame {
   rules: RuleSet;
   shotLocations: boolean;
   locked: boolean;
-  roster: { playerId: string; name: string; jersey: string; team: Team }[];
+  roster: { playerId: string; name: string; jersey: string; team: Team; photo: string | null }[];
 }
 
 export const game = signal<PublicGame | 'missing' | null>(null);

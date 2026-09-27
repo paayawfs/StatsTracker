@@ -1,6 +1,6 @@
 import { useComputed, useSignal } from '@preact/signals';
 import { describe as describeEvent, formatClock, FOUL_KINDS, remaining, shotZone, teamFoulCount, timeoutsAllowed, ZONES, type GameEvent, type Role, type Team } from '@stats/core';
-import { Court, snapToSection, toScreen } from '@stats/ui';
+import { Avatar, Court, snapToSection, toScreen } from '@stats/ui';
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { Input } from './logic/entry';
@@ -93,13 +93,18 @@ function Pregame() {
             <h2>
               {gi.teams[t]} <span class={starters.value[t].length === 5 ? 'count ok' : 'count'}>{starters.value[t].length}/5</span>
             </h2>
-            <div class="chip-grid">
-              {gi.players.filter((p) => p.team === t).map((p) => (
-                <button key={p.id} class={starters.value[t].includes(p.id) ? 'chip on' : 'chip'} onClick={() => toggle(p)} data-testid={`starter-${p.jersey}-${t}`}>
-                  <b>{p.jersey}</b>
-                  <span>{lastName(p.name)}</span>
-                </button>
-              ))}
+            <div class="starter-grid">
+              {gi.players.filter((p) => p.team === t).map((p) => {
+                const on = starters.value[t].includes(p.id);
+                return (
+                  <button key={p.id} class={on ? 'starter on' : 'starter'} onClick={() => toggle(p)} data-testid={`starter-${p.jersey}-${t}`} aria-pressed={on}>
+                    <Avatar name={p.name} photo={p.photo} team={t} size={40} />
+                    <b class="jersey">{p.jersey}</b>
+                    <span class="pname">{p.name}</span>
+                    {on && <i class="check" aria-hidden="true">✓</i>}
+                  </button>
+                );
+              })}
             </div>
           </section>
         ))}

@@ -24,7 +24,7 @@ export function must<T>(r: { data: T | null; error: { message: string } | null }
 export interface League { id: string; name: string }
 export interface Season { id: string; name: string }
 export interface TeamRow { id: string; name: string }
-export interface PlayerRow { id: string; team_id: string; name: string; default_jersey: string | null }
+export interface PlayerRow { id: string; team_id: string; name: string; default_jersey: string | null; photo: string | null }
 export interface RuleSetRow { id: string; name: string; rules: RuleSet }
 export interface GameRow {
   id: string;
@@ -50,7 +50,7 @@ export const addSeason = async (league: string, name: string) => must(await db.f
 export const teams = async (league: string) => must(await db.from('teams').select('id, name').eq('league_id', league).order('name')) as TeamRow[];
 export const addTeam = async (league: string, name: string) => must(await db.from('teams').insert({ league_id: league, name }).select('id, name').single()) as TeamRow;
 export const players = async (teamIds: string[]) =>
-  (teamIds.length ? must(await db.from('players').select('id, team_id, name, default_jersey').in('team_id', teamIds).order('name')) : []) as PlayerRow[];
+  (teamIds.length ? must(await db.from('players').select('id, team_id, name, default_jersey, photo').in('team_id', teamIds).order('name')) : []) as PlayerRow[];
 
 /** Parse pasted lines like "23 Kofi Mensah" or "Kofi Mensah" into players. */
 export function parsePlayers(text: string): { name: string; default_jersey: string | null }[] {
@@ -161,3 +161,5 @@ export async function importRoster(league: string, plan: import('./csv').ImportP
   for (const [team, rows] of byTeam) await addPlayers(team, rows);
   return [...byTeam.values()].reduce((n, rows) => n + rows.length, 0);
 }
+
+export const setPhoto = async (player: string, photo: string | null) => must(await db.from('players').update({ photo }).eq('id', player).select('id'));

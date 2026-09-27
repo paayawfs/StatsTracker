@@ -36,6 +36,10 @@ test('admin: set up a league, run a game with a scorer, lock it, export, season 
     await card.getByRole('button', { name: 'Add 6 players' }).click();
     await expect(card.getByText('6 players')).toBeVisible();
   }
+  // A photo for Lions #4 (a tiny PNG), shrunk in the browser and stored with the player.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64');
+  await admin.getByLabel('Photo for Lions 4').setInputFiles({ name: 'lions4.png', mimeType: 'image/png', buffer: png });
+  await expect(admin.getByTestId('team-Lions').locator('img.avatar')).toHaveCount(1);
 
   // Game + code.
   await btn(admin, 'Games').click();
@@ -54,6 +58,10 @@ test('admin: set up a league, run a game with a scorer, lock it, export, season 
   await scorer.goto('/');
   await scorer.getByLabel('Game code').fill(code);
   await btn(scorer, 'Join game').click();
+  // Starter cards show the photo, or initials when there is none.
+  await expect(scorer.getByTestId('starter-4-A').locator('img.avatar')).toBeVisible();
+  await expect(scorer.getByTestId('starter-5-A')).toContainText('L5');
+  await expect(scorer.getByTestId('starter-5-A')).toContainText('Lions 5');
   await pickStartersAndStart(scorer);
   await player(scorer, 'A', 4).click();
   await btn(scorer, '3 ✓').click();

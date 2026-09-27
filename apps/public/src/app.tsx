@@ -1,6 +1,6 @@
 import { useSignal } from '@preact/signals';
 import { formatClock, remaining, ZONES, type ShotZone, type Split, type Team, type ZoneGroup } from '@stats/core';
-import { Court } from '@stats/ui';
+import { Avatar, Court } from '@stats/ui';
 import { useEffect } from 'preact/hooks';
 import { heat, minutes, pct, signed } from './format';
 import { box, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
@@ -95,7 +95,10 @@ function BoxTable({ g, team }: { g: PublicGame; team: Team }) {
               return (
                 <tr key={p.playerId} class={p.min || p.pts ? '' : 'dnp'}>
                   <td class="name">
-                    <b>{r?.jersey}</b> {r?.name}
+                    <span class="who">
+                      <Avatar name={r?.name ?? ''} photo={r?.photo} team={team} size={24} />
+                      <b>{r?.jersey}</b> {r?.name}
+                    </span>
                   </td>
                   <td>{minutes(p.min)}</td>
                   <td>{p.pts}</td>
