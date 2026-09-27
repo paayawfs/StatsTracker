@@ -1,6 +1,6 @@
 import { useComputed, useSignal } from '@preact/signals';
 import { describe as describeEvent, formatClock, FOUL_KINDS, remaining, shotZone, teamFoulCount, timeoutsAllowed, ZONES, type GameEvent, type Role, type Team } from '@stats/core';
-import { Court, toScreen } from '@stats/ui';
+import { Court, snapToSection, toScreen } from '@stats/ui';
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { Input } from './logic/entry';
@@ -287,7 +287,7 @@ function Stage() {
         team && !can.value.team(team) ? (
           <>{who(e.player)} · {gi.teams[team]}'s device records their actions. Here: block, steal or assist.</>
         ) : gi.shotLocations ? (
-          <>{who(e.player)} · tap where the shot was taken</>
+          <>{who(e.player)} · tap the section of the shot</>
         ) : (
           <>{who(e.player)}</>
         );
@@ -404,7 +404,8 @@ function ShotCourt({ dim, active }: { dim: boolean; active: boolean }) {
         highlight={spot ? shotZone(spot.x, spot.y) : null}
         onTap={(x, y) => {
           const t = performance.now();
-          input({ kind: 'court', x, y });
+          const spot = snapToSection(x, y); // scorers pick a section, not an exact spot
+          input({ kind: 'court', x: spot.x, y: spot.y });
           measureTap(t);
         }}
       >

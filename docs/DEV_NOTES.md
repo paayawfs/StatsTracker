@@ -1052,3 +1052,14 @@ players as jersey chips in two side rails, one bottom dock for everything else.
   crosses on top in team colours; team filter; the 5-group table (restricted area, paint,
   mid-range, corner 3, above-break 3) beside it.
 - Checked with a scripted game of 10 located shots: section labels, colours and the table agree.
+
+### Section taps (user decision, 2026-09-27)
+
+- Scorers tap a **section**, not an exact spot. `snapToSection(x, y)` (`packages/ui`) turns any
+  tap into its section's reference point (the section label point); events keep storing `x`/`y`,
+  now always that point, so `shotZone(x, y)` gives the section and no schema change was needed.
+  Test: a grid of taps across the whole court each snap into their own section.
+- Viewer: individual shot markers removed (they'd all sit on the section point); the chart is
+  the section heat map with made/attempted labels.
+- e2e: the viewer test checks the stored shot is the top-3 reference point (x 0.5, y 0.75), not
+  the raw tap, and the chart shows one "1/1" section.

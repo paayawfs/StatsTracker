@@ -1,4 +1,4 @@
-import type { ShotZone } from '@stats/core';
+import { shotZone, type ShotZone } from '@stats/core';
 
 /**
  * FIBA half court in SVG units: 10 units per metre, 150 x 140, baseline at the bottom (y = 140).
@@ -41,3 +41,13 @@ export const ZONE_LABEL_AT: Record<ShotZone, [number, number]> = {
   wing3Right: [132, 62],
   top3: [75, 35],
 };
+
+/**
+ * Scorers tap a section, not an exact spot: any tap snaps to its section's reference point (the
+ * label point, tested to lie inside the section). Returned in normalised court coordinates.
+ */
+export function snapToSection(x: number, y: number): { x: number; y: number; zone: ShotZone } {
+  const zone = shotZone(x, y);
+  const [sx, sy] = ZONE_LABEL_AT[zone];
+  return { ...toCourt(sx, sy), zone };
+}

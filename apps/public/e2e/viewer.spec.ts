@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { btn, createGame, joinAndStart, player } from '../../scorer/e2e/fixtures';
+import { btn, createGame, joinAndStart, player, serverEvents } from '../../scorer/e2e/fixtures';
 
 const SCORER = 'http://localhost:4173';
 const VIEWER = 'http://localhost:4174';
@@ -27,6 +27,9 @@ test('a viewer follows a live game: score within 2 s, box score, play-by-play, s
   expect(ms).toBeLessThan(2000);
   await btn(scorer, 'Skip').click();
 
+  // The scorer picked a section: the stored spot is the top-3 section's reference point, not the raw tap.
+  await expect.poll(async () => (await serverEvents(g.slug)).find((e) => e.type === 'shot')?.payload).toMatchObject({ x: 0.5, y: 0.75 });
+
   // B misses a 2, A rebounds.
   await player(scorer, 'B', 5).click();
   await btn(scorer, '2 ✗').click();
@@ -43,7 +46,7 @@ test('a viewer follows a live game: score within 2 s, box score, play-by-play, s
   await expect(viewer.getByTestId('plays')).toContainText('#6 Lion 6 defensive rebound');
 
   await viewer.getByRole('button', { name: 'Shot chart' }).click();
-  await expect(viewer.getByTestId('shot-chart').locator('circle.made')).toHaveCount(1);
+  await expect(viewer.getByTestId('shot-chart').locator('.court-label')).toHaveText(['1/1']); // one made shot in one section
 
   await viewer.getByRole('button', { name: 'Lineups' }).click();
   await expect(viewer.getByText('Lions lineups')).toBeVisible();

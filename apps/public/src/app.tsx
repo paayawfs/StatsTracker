@@ -1,6 +1,6 @@
 import { useSignal } from '@preact/signals';
 import { formatClock, remaining, ZONES, type ShotZone, type Split, type Team, type ZoneGroup } from '@stats/core';
-import { Court, toScreen } from '@stats/ui';
+import { Court } from '@stats/ui';
 import { useEffect } from 'preact/hooks';
 import { heat, minutes, pct, signed } from './format';
 import { box, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
@@ -256,7 +256,6 @@ function Shots({ g }: { g: PublicGame }) {
     if (color) fills[id] = color;
     if (s.att) labels[id] = `${s.made}/${s.att}`;
   }
-  const visible = c.shots.filter((s) => filter.value === 'all' || s.team === filter.value);
   return (
     <section class="shots">
       <div class="filters">
@@ -267,16 +266,7 @@ function Shots({ g }: { g: PublicGame }) {
         ))}
       </div>
       <div class="shots-layout">
-        <Court id="viewer-court" testId="shot-chart" fills={fills} labels={labels}>
-          {visible.map((s) => {
-            const { sx, sy } = toScreen(s.x, s.y);
-            return s.made ? (
-              <circle key={s.id} class={`made team-${s.team}`} cx={sx} cy={sy} r="2.3" />
-            ) : (
-              <path key={s.id} class={`miss team-${s.team}`} d={`M${sx - 2} ${sy - 2} l4 4 m0 -4 l-4 4`} />
-            );
-          })}
-        </Court>
+        <Court id="viewer-court" testId="shot-chart" fills={fills} labels={labels} />
         <table>
           <thead>
             <tr>
@@ -299,7 +289,7 @@ function Shots({ g }: { g: PublicGame }) {
           </tbody>
         </table>
       </div>
-      <p class="small">Numbers on the court are made/attempted per section; colour runs from cold (blue) to hot (orange), stronger with more attempts. ● made · ✕ missed.</p>
+      <p class="small">Numbers on the court are made/attempted per section; colour runs from cold (blue) to hot (orange), stronger with more attempts. Scorers record the section of each shot, not an exact spot.</p>
     </section>
   );
 }
