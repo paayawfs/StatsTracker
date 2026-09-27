@@ -4,9 +4,13 @@
   "type": "module",
   "scripts": {
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "dev:game": "tsx scripts/dev-game.ts",
+    "e2e": "pnpm --filter @stats/scorer e2e"
   },
   "devDependencies": {
-    "supabase": "^2.118.0"
+    "@supabase/supabase-js": "^2.117.2",
+    "supabase": "^2.118.0",
+    "tsx": "^4.23.15"
   }
 }

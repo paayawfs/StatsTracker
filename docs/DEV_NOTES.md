@@ -505,3 +505,24 @@ conflict notifications, peer latency hook), deterministic network simulator. Cor
 - Behaviour when the anonymous session's token expires mid-game relies on supabase-js
   auto-refresh; classified as retryable, but not exercised.
 - Bundle size of supabase-js is measured in Phase 4.
+
+## Phase 4: scorer app, single mode
+
+### Step 1: scaffold
+
+- `apps/scorer`: Preact + @preact/signals + Vite 8, strict TS. `pnpm --filter @stats/scorer dev`.
+- Env: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` in `apps/scorer/.env.local` (gitignored).
+  Defaults to local Supabase.
+- `public/sw.js`: hand-written service worker (no plugin): network-first for navigations (updates
+  land when online, cached shell when offline), cache-first for hashed assets, and nothing
+  cross-origin (Supabase traffic is never cached). `manifest.webmanifest` + SVG icon make it
+  installable.
+- `pnpm dev:game [--multi]` (root, `scripts/dev-game.ts`, run with `tsx`): demo league, two
+  teams of 12 with jerseys 4-15, FIBA rules, shot locations on, a game and a join code. Local by
+  default; set `SUPABASE_URL`/`SUPABASE_ANON_KEY`/`SUPABASE_SERVICE_KEY` for hosted. Stand-in
+  for Phase 7 admin.
+- Playwright + Chromium installed for e2e.
+- **Bundle decision (measured):** full `@supabase/supabase-js` = 59.8 KB gzip with Preact;
+  auth-js + postgrest-js + realtime-js alone = 48.5 KB. Kept full supabase-js: ~11 KB only on
+  first load (the service worker caches after), and hand-wiring auth tokens into PostgREST and
+  Realtime is where token-refresh bugs would live. Revisit if first-load time on 3G matters.
