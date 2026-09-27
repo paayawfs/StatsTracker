@@ -717,3 +717,41 @@ that holds no role); **the game-control device picks both lineups** (Clock, else
 - `window.__scorer.peerLatency` exposes fast-path receipt samples for e2e.
 - The phone no-scroll e2e caught the new control bar pushing the page to 873 px; team actions
   now sit three to a row on phones.
+
+### Step 4: multi-device e2e
+
+- `e2e/multi-mode.spec.ts`: each "device" is its own browser context (own storage, own anonymous
+  user, own device id). Fixture `device(browser, code, role)` joins and claims.
+  1. Three devices (Team A, Team B, Clock): only Clock can start the game and run the clock; A's
+     miss prompts B for the defensive rebound, and B's answer clears A's prompt; B's shooting
+     foul puts the FT buttons on A's device only; A selecting a B player gets only BLK/STL/AST;
+     timeouts only on the Clock device; peer fast-path latency under 300 ms (local: 2-6 ms);
+     all durable, nothing refused.
+  2. A held role shows "another device" and offers no Claim.
+  3. Dead device: A's context is closed; B takes over teamA at a stoppage, records A's shot and
+     runs the clock (multi -> single fallback); the server accepts everything.
+  4. Concurrent amendments from two devices on the same shot: both see the conflict notice and
+     end on the same score.
+  5. Team B offline records a shot while A records one; after reconnect both devices show both.
+- Full e2e: 11 passing (6 single-mode + 5 multi-mode).
+
+## Phase 5 report
+
+**Built:** multi mode end to end: role picker (claim / take over at a stoppage / release),
+any-joined-scorer take-over on the server, per-event role stamping, device-side ownership
+mirroring the server rules, split rebound prompts (decision 3), FT bar on the shooting team's
+device, Clock device with control bar (timeouts, arrow, jump ball), control-only clock and period
+actions, cross-device notices (role taken over / gained, conflicts, refusals).
+
+**Verified:** unit core 137, sync 47, scorer 82; pgTAP 86; e2e 11 (5 multi-device). Local peer
+fast-path latency 2-6 ms.
+
+**Not verified / open:**
+- The server-side refusal of a *simultaneous* double claim is covered by pgTAP (primary key);
+  the e2e only covers the UI not offering a held role.
+- Ownership rules live in two places (SQL `authorize_event` and `logic/ownership.ts`); both have
+  tests for the same cases, but a change must be made in both.
+- The take-over migration is not yet pushed to the hosted project.
+- Offline events recorded by a device whose role was taken over meanwhile are refused on
+  reconnect and shown in its refused list; re-entering them is manual (admin tooling, Phase 7).
+- No real phones yet.
