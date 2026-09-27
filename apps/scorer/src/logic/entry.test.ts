@@ -77,6 +77,14 @@ describe('shots', () => {
     expect(r.emitted[0]).toMatchObject({ type: 'shot', payload: { shooter: 'a1', value: 3, made: false, x: 0.5, y: 0.9 } });
   });
 
+  test('tapping another section before Made/Missed moves the shot there', () => {
+    const r = run(p('a1'), { kind: 'court', x: 0.5, y: 0.2 }, { kind: 'court', x: 0.5, y: 0.9 });
+    expect(r.entry).toEqual({ step: 'shotResult', player: 'a1', x: 0.5, y: 0.9, value: 3 });
+    expect(r.emitted).toEqual([]);
+    const done = run(p('a1'), { kind: 'court', x: 0.5, y: 0.9 }, { kind: 'court', x: 0.5, y: 0.2 }, { kind: 'result', made: true });
+    expect(done.emitted[0]).toMatchObject({ payload: { shooter: 'a1', value: 2, made: true, x: 0.5, y: 0.2 } });
+  });
+
   test('court value can be flipped before the result', () => {
     const r = run(p('a1'), { kind: 'court', x: 0.5, y: 0.2 }, { kind: 'flipValue' }, { kind: 'result', made: true });
     expect(r.emitted[0]).toMatchObject({ payload: { value: 3 } });

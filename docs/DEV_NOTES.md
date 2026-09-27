@@ -1095,3 +1095,9 @@ players as jersey chips in two side rails, one bottom dock for everything else.
   and no-charge arc are drawn faintly (floor paint, not section boundaries).
 - Tests: core 198 (16 location cases), ui 6; e2e 16 + 2. Screenshot check: the viewer heat map
   matches the reference layout.
+
+### Re-tapping a section
+
+- While the Made/Missed card is up, tapping another section moves the pending shot there
+  (section, highlight and 2/3 value update). Entry machine: `court` input in the `shotResult`
+  step. Unit test + e2e (tap top 3, then near the rim, "2 Made" -> one 2-point shot stored).

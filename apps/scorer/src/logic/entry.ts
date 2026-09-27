@@ -195,6 +195,8 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
       break;
     case 'shotResult':
       if (input.kind === 'flipValue') return done({ ...entry, value: entry.value === 2 ? 3 : 2 });
+      // Tapping another section before Made/Missed moves the shot there.
+      if (input.kind === 'court') return done({ ...entry, x: input.x, y: input.y, value: shotValue(input.x, input.y) });
       if (input.kind === 'result') return shoot(entry.player, entry.value, input.made, { x: entry.x, y: entry.y });
       break;
     case 'sub':

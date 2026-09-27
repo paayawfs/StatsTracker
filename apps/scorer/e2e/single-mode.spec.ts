@@ -82,3 +82,18 @@ test('corrections from the play-by-play', async ({ page }) => {
   await btn(page, 'Remove').click();
   await expect(page.getByTestId('score-A')).toHaveText('0');
 });
+
+test('changing your mind: tapping another section before Made/Missed moves the shot', async ({ page }) => {
+  const g = await createGame(true);
+  await joinAndStart(page, g.code);
+  await player(page, 'A', 4).click();
+  const court = page.getByTestId('court');
+  const box = (await court.boundingBox())!;
+  await court.click({ position: { x: box.width * 0.5, y: box.height * 0.1 } }); // top 3
+  await expect(page.getByText('Top 3')).toBeVisible();
+  await court.click({ position: { x: box.width * 0.5, y: box.height * 0.85 } }); // near the rim instead
+  await expect(page.getByText('At the rim')).toBeVisible();
+  await btn(page, '2 Made').click();
+  await expect(page.getByTestId('score-A')).toHaveText('2');
+  await expect.poll(async () => (await serverEvents(g.slug)).filter((e) => e.type === 'shot').map((e) => e.payload.value)).toEqual([2]);
+});
