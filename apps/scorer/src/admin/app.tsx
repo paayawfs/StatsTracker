@@ -298,6 +298,7 @@ function Rules({ league }: { league: League }) {
           {num('Team fouls before bonus', 'r-bonus', e.rules.teamFoulBonus.threshold, (n) => set({ teamFoulBonus: { ...e.rules.teamFoulBonus, threshold: n } }))}
           {num('Bonus free throws', 'r-bft', e.rules.teamFoulBonus.freeThrows, (n) => set({ teamFoulBonus: { ...e.rules.teamFoulBonus, freeThrows: n } }))}
           {num('Overtime timeouts', 'r-ott', e.rules.overtimeTimeouts, (n) => set({ overtimeTimeouts: n }))}
+          <label class="check"><input id="r-arrow" type="checkbox" checked={e.rules.possessionArrow !== false} onChange={(ev) => set({ possessionArrow: ev.currentTarget.checked })} /> Use the possession arrow (FIBA). Off = a jump ball every time.</label>
           <p class="small span">Timeout windows: {e.rules.timeouts.map((w) => `${w.count} in periods ${w.periods.join('-')}`).join(', ')} (from the preset).</p>
           <button class="primary">Save rule set</button>
           <button type="button" onClick={() => (editing.value = null)}>Cancel</button>

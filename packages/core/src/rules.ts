@@ -40,6 +40,8 @@ export const RuleSetSchema = v.pipe(
     timeouts: v.array(TimeoutWindowSchema),
     overtimeTimeouts: count,
     points: v.object({ freeThrow: positive, two: positive, three: positive }),
+    /** FIBA alternating possession arrow. Off = jump balls every time (NBA). Older rule sets: on. */
+    possessionArrow: v.optional(v.boolean(), true),
   }),
   v.check(
     (r) => r.timeouts.every((w) => w.periods.every((p) => p <= r.periods)),
@@ -64,6 +66,7 @@ export const FIBA: RuleSet = {
   ],
   overtimeTimeouts: 1,
   points: { freeThrow: 1, two: 2, three: 3 },
+  possessionArrow: true,
 };
 
 // ponytail: NBA last-2-minutes bonus rule is not modelled.
@@ -80,6 +83,7 @@ export const NBA: RuleSet = {
   timeouts: [{ periods: [1, 2, 3, 4], count: 7 }],
   overtimeTimeouts: 2,
   points: { freeThrow: 1, two: 2, three: 3 },
+  possessionArrow: false,
 };
 
 export const periodLength = (r: RuleSet, period: number) =>

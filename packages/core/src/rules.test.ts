@@ -52,3 +52,15 @@ describe('rule helpers', () => {
     expect(timeoutsAllowed(NBA, 3)).toEqual({ periods: [1, 2, 3, 4], count: 7 });
   });
 });
+
+describe('possession arrow setting', () => {
+  test('FIBA uses the arrow, NBA does not', () => {
+    expect(FIBA.possessionArrow).toBe(true);
+    expect(NBA.possessionArrow).toBe(false);
+  });
+
+  test('rule sets saved before the setting existed default to using the arrow', () => {
+    const { possessionArrow: _, ...old } = FIBA;
+    expect(v.parse(RuleSetSchema, old).possessionArrow).toBe(true);
+  });
+});

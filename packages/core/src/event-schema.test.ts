@@ -18,7 +18,10 @@ test('newest event schema migration matches EventSchema', () => {
   const latest = readdirSync(dir).filter((f) => f.endsWith('_event_schema.sql')).sort().at(-1);
   const current = latest && readFileSync(new URL(latest, dir), 'utf8');
   if ((import.meta as unknown as { env: { MODE: string } }).env.MODE === 'write-schema' && current !== sql) {
-    const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+    // Always after the newest existing migration, even one named ahead of this clock.
+    const now = Number(new Date().toISOString().replace(/\D/g, '').slice(0, 14));
+    const newest = Math.max(...readdirSync(dir).map((f) => Number(f.slice(0, 14))).filter(Number.isFinite));
+    const stamp = String(Math.max(now, newest + 1));
     writeFileSync(new URL(`${stamp}_event_schema.sql`, dir), sql);
     return;
   }

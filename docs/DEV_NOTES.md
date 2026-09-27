@@ -1110,3 +1110,16 @@ players as jersey chips in two side rails, one bottom dock for everything else.
   once a player of that team is tapped it shows "FT 1/1 · #7 Name" and the buttons work.
 - e2e: coach technical -> buttons disabled -> tap a Tigers player -> Made -> Tigers score 1.
 - All e2e: scorer 18, viewer 2.
+
+### Possession arrow as a rule-set setting
+
+- `RuleSet.possessionArrow` (optional, defaults to true so older rule sets and events stay valid):
+  FIBA preset on, NBA preset off. Admin rule-set editor has a checkbox.
+- Scorer ☰ menu shows the arrow item only when the game's rules use it; "Jump won ..." sets the
+  arrow only then.
+- Event JSON Schema regenerated (`20260928090001_event_schema`).
+- **Generator fix:** `pnpm db:event-schema` now stamps a new migration after the newest existing
+  one (it used the UTC clock, which sorted before a hand-dated migration and made the CLI refuse
+  it).
+- e2e fixture `createGame(shotLocations, mode, rules)`; `pickStartersAndStart` accepts a 10:00 or
+  12:00 period. New e2e: FIBA game shows the arrow, NBA game doesn't. All: core 200, e2e 19 + 2.

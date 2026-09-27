@@ -1,6 +1,6 @@
 import { expect, type Browser, type Page } from '@playwright/test';
 import { createClient } from '@supabase/supabase-js';
-import { FIBA } from '../../../packages/core/src/rules';
+import { FIBA, type RuleSet } from '../../../packages/core/src/rules';
 
 const URL = 'http://127.0.0.1:54321';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
@@ -13,7 +13,7 @@ const must = <T>(r: { data: T | null; error: unknown }): T => {
 };
 
 /** A fresh game (jerseys 4..15 per team) and its join code. */
-export async function createGame(shotLocations = false, mode: 'single' | 'multi' = 'single') {
+export async function createGame(shotLocations = false, mode: 'single' | 'multi' = 'single', rules: RuleSet = FIBA) {
   const service = createClient(URL, SERVICE, opts);
   const email = `e2e-${crypto.randomUUID()}@test.local`;
   const password = 'e2e-password-123';
@@ -21,7 +21,7 @@ export async function createGame(shotLocations = false, mode: 'single' | 'multi'
   const admin = createClient(URL, ANON, opts);
   must(await admin.auth.signInWithPassword({ email, password }));
   const league = must(await admin.rpc('create_league', { league_name: 'E2E' })) as string;
-  const rs = must(await admin.from('rule_sets').insert({ league_id: league, name: 'FIBA', rules: FIBA }).select('id').single()) as { id: string };
+  const rs = must(await admin.from('rule_sets').insert({ league_id: league, name: rules.name, rules }).select('id').single()) as { id: string };
   const teams = must(await admin.from('teams').insert([{ league_id: league, name: 'Lions' }, { league_id: league, name: 'Tigers' }]).select('id')) as { id: string }[];
   const game = must(
     await admin.from('games').insert({ league_id: league, team_a: teams[0]!.id, team_b: teams[1]!.id, rule_set_id: rs.id, mode, shot_locations: shotLocations }).select('id, public_slug').single(),
@@ -50,7 +50,7 @@ async function joinCode(page: Page, code: string) {
 export async function pickStartersAndStart(page: Page) {
   for (const t of ['A', 'B']) for (const j of [4, 5, 6, 7, 8]) await page.getByTestId(`starter-${j}-${t}`).click();
   await page.getByRole('button', { name: 'Start game' }).click();
-  await expect(page.getByTestId('clock')).toHaveText('10:00');
+  await expect(page.getByTestId('clock')).toHaveText(/^(10|12):00$/); // FIBA or NBA period
 }
 
 /** Single mode: join, pick starters, start. */

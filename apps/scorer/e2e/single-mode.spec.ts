@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { NBA } from '../../../packages/core/src/rules';
 import { btn, createGame, joinAndStart, player, serverEvents, menu } from './fixtures';
 
 test('a full single-mode sequence: shots, assist, rebound, foul + free throws, sub, undo, period end', async ({ page }) => {
@@ -111,4 +112,19 @@ test('technical foul free throw: pick the shooter first, then Made works', async
   await made.click();
   await expect(page.getByTestId('score-B')).toHaveText('1');
   await expect(made).toHaveCount(0); // no more free throws owed
+});
+
+test('possession arrow: shown for FIBA rules, hidden when the rule set turns it off', async ({ page }) => {
+  const fiba = await createGame();
+  await joinAndStart(page, fiba.code);
+  await page.getByRole('button', { name: 'More' }).click();
+  await expect(page.getByTestId('arrow')).toBeVisible();
+  await page.keyboard.press('Escape');
+
+  const nba = await createGame(false, 'single', NBA);
+  await page.evaluate(() => localStorage.removeItem('scorer.game'));
+  await joinAndStart(page, nba.code);
+  await page.getByRole('button', { name: 'More' }).click();
+  await expect(page.getByRole('button', { name: 'Jump won Lions' })).toBeVisible();
+  await expect(page.getByTestId('arrow')).toHaveCount(0);
 });

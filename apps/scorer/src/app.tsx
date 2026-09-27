@@ -522,9 +522,11 @@ function Menu({ close, open }: { close: () => void; open: (p: 'log' | 'roles') =
   const gi = info.value!;
   const st = state.value;
   const control = can.value.control && st.phase === 'live';
+  // Rule set setting: leagues without the alternating possession arrow (NBA-style) never see it.
+  const arrow = st.rules?.possessionArrow !== false;
   const jump = (wonBy: Team) => {
     record({ type: 'jumpBall', payload: { wonBy } });
-    record({ type: 'possessionArrow', payload: { team: other(wonBy) } });
+    if (arrow) record({ type: 'possessionArrow', payload: { team: other(wonBy) } });
   };
   const item = (label: string, fn: () => void, testId?: string) => (
     <button data-testid={testId} onClick={() => (close(), fn())}>
@@ -537,7 +539,7 @@ function Menu({ close, open }: { close: () => void; open: (p: 'log' | 'roles') =
         {item('Play-by-play', () => open('log'))}
         {gi.mode === 'multi' && item('Roles', () => open('roles'))}
         {control && item('End period', endPeriod)}
-        {control && item(`Arrow → ${st.arrow === 'A' ? gi.teams.B : gi.teams.A}`, () => record({ type: 'possessionArrow', payload: { team: st.arrow === 'A' ? 'B' : 'A' } }), 'arrow')}
+        {control && arrow && item(`Arrow → ${st.arrow === 'A' ? gi.teams.B : gi.teams.A}`, () => record({ type: 'possessionArrow', payload: { team: st.arrow === 'A' ? 'B' : 'A' } }), 'arrow')}
         {control && item(`Jump won ${gi.teams.A}`, () => jump('A'))}
         {control && item(`Jump won ${gi.teams.B}`, () => jump('B'))}
         {item('Keyboard shortcuts', () => (showHelp.value = true))}
