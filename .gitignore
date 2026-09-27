@@ -4,3 +4,6 @@ coverage/
 .idea/
 # ponytail: PyCharm starter file, not part of this project
 main.py
+.env.local
+test-results/
+playwright-report/
