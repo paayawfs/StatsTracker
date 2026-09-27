@@ -2,7 +2,7 @@ import { effect } from '@preact/signals';
 import { render } from 'preact';
 import { App } from './app';
 import './index.css';
-import { info, onKey, tapToRender } from './session';
+import { info, onKey, peerLatency, tapToRender } from './session';
 
 render(<App />, document.getElementById('app')!);
 window.addEventListener('keydown', onKey);
@@ -21,4 +21,4 @@ effect(() => void (info.value && wake()));
 document.addEventListener('visibilitychange', () => void wake());
 
 // For e2e latency assertions.
-Object.assign(window, { __scorer: { tapToRender } });
+Object.assign(window, { __scorer: { tapToRender, peerLatency } });

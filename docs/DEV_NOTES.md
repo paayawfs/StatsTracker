@@ -690,3 +690,30 @@ that holds no role); **the game-control device picks both lineups** (Clock, else
   Playwright `e2e/*.spec.ts` files, and failing them at file level. Since Phase 4 step 3 the
   scorer's `pnpm test` had exited non-zero, and my grep for "Tests" hid it; the unit tests
   themselves passed. `vite.config.ts` now limits Vitest to `src/**/*.test.ts`.
+
+### Step 3: multi mode in the app
+
+- Session: `myRoles` / `can` (computed from the reducer's `roles` and this device id), `claim`,
+  `takeOver` (a `roleTransfer` to this device, written as that role), `release`, `roleName`.
+  Every event is stamped with the held role that owns it (`roleFor`). The entry machine gets
+  `can`. Clock, set-clock and end-period are control-only (keyboard Space included).
+- Peer-triggered prompts (`onPeerEvent`): when another device records a miss (missed shot, or
+  a missed last FT) by the team this device doesn't own, and this device owns the defending
+  team and is idle, it gets the rebound prompt (decision 3). A rebound or other play from
+  elsewhere clears a pending rebound prompt.
+- Notices: "Your X role was taken over by another device" / "You now hold X"; conflicts and
+  refusals as before.
+- UI:
+  - Multi-mode devices with no role see the role picker (holder per role: you / another device /
+    free; Claim, Take over, Release). Take over is only enabled while the clock is stopped
+    (brief: transfers at stoppages). A Roles button stays in the footer during the game.
+  - Pregame: only the game-control device (Clock, else Team A) picks starters; others wait.
+  - Control bar (game-control device only): timeouts for both teams, possession arrow,
+    jump ball (records `jumpBall` + arrow to the other team). Timeouts moved out of the team
+    panels.
+  - Team panels show Team TO / Coach T / Bench T / Team REB only for owned teams. Selecting an
+    opponent offers just BLK / STL / AST. The FT bar has buttons only on the shooting team's
+    device. Period breaks are driven by the control device.
+- `window.__scorer.peerLatency` exposes fast-path receipt samples for e2e.
+- The phone no-scroll e2e caught the new control bar pushing the page to 873 px; team actions
+  now sit three to a row on phones.

@@ -1,12 +1,12 @@
 import { useComputed, useSignal } from '@preact/signals';
-import { FOUL_KINDS, teamFoulCount, timeoutsAllowed, type GameEvent, type Team } from '@stats/core';
+import { FOUL_KINDS, teamFoulCount, timeoutsAllowed, type GameEvent, type Role, type Team } from '@stats/core';
 import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { describe } from './describe';
 import { formatClock, remaining } from './logic/clock';
 import type { Input } from './logic/entry';
 import {
-  checkpoint, correct, endGame, endPeriod, entry, events, info, input, join, measureTap, nextPeriod, notice, now, online,
+  can, checkpoint, claim, correct, endGame, endPeriod, entry, events, info, input, join, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
   pending, playersById, rejected, resume, setClock, showHelp, startGame, state, tapToRender, toggleClock, typed, undo, type Player,
 } from './session';
 
@@ -28,6 +28,7 @@ export function App() {
   }, []);
   if (!ready.value) return null;
   if (!info.value) return <Join />;
+  if (info.value.mode === 'multi' && !myRoles.value.length) return <RolePicker />;
   if (state.value.phase === 'pregame') return <Pregame />;
   return <Live />;
 }
@@ -69,6 +70,18 @@ function Pregame() {
     starters.value = { ...starters.value, [p.team]: list.includes(p.id) ? list.filter((id) => id !== p.id) : [...list, p.id] };
   };
   const ok = starters.value.A.length === 5 && starters.value.B.length === 5;
+  if (!can.value.control) {
+    return (
+      <div class="pregame">
+        <h1>Waiting for the game to start</h1>
+        <p>
+          You score {myRoles.value.map(roleName).join(' and ')}. The {state.value.roles.clock ? 'Clock' : roleName('teamA')} device picks the
+          starters and starts the game.
+        </p>
+        <Roles />
+      </div>
+    );
+  }
   return (
     <div class="pregame">
       <h1>Confirm starters</h1>
@@ -97,9 +110,11 @@ function Pregame() {
 function Live() {
   const phase = state.value.phase;
   const showLog = useSignal(false);
+  const showRoles = useSignal(false);
   return (
     <div class="live">
       <Scoreboard />
+      {phase === 'live' && can.value.control && <ControlBar />}
       {notice.value && (
         <div class="notice" onClick={() => (notice.value = null)}>
           {notice.value}
@@ -118,11 +133,18 @@ function Live() {
         <button class="undo" {...tap(undo)} data-testid="undo">
           Undo
         </button>
-        {phase === 'live' && <button onClick={endPeriod}>End period</button>}
+        {phase === 'live' && can.value.control && <button onClick={endPeriod}>End period</button>}
+        {info.value!.mode === 'multi' && <button onClick={() => (showRoles.value = !showRoles.value)}>Roles</button>}
         <button onClick={() => (showLog.value = !showLog.value)}>{showLog.value ? 'Hide' : 'Play-by-play'}</button>
       </footer>
       {showLog.value && <PlayByPlay />}
       {showHelp.value && <Help />}
+      {showRoles.value && (
+        <aside class="help">
+          <Roles />
+          <button onClick={() => (showRoles.value = false)}>Close</button>
+        </aside>
+      )}
     </div>
   );
 }
@@ -141,7 +163,7 @@ function Scoreboard() {
           P{state.value.period} · {online.value ? 'online' : 'offline'}
           {pending.value ? ` · ${pending.value} to sync` : ''}
         </span>
-        <ClockAdjust />
+        {can.value.control && <ClockAdjust />}
       </div>
       <TeamScore team="B" name={gi.teams.B} />
     </header>
@@ -208,11 +230,14 @@ function TeamPanel({ team }: { team: Team }) {
         ))}
       </div>
       <div class="team-actions">
-        {rebounding.value && <button {...send({ kind: 'team', team })}>Team REB</button>}
-        <button {...send({ kind: 'timeout', team })}>Timeout</button>
-        <button {...send({ kind: 'teamTurnover', team })}>Team TO</button>
-        <button {...send({ kind: 'benchFoul', team, offender: 'coach' })}>Coach T</button>
-        <button {...send({ kind: 'benchFoul', team, offender: 'bench' })}>Bench T</button>
+        {can.value.team(team) && (
+          <>
+            {rebounding.value && <button {...send({ kind: 'team', team })}>Team REB</button>}
+            <button {...send({ kind: 'teamTurnover', team })}>Team TO</button>
+            <button {...send({ kind: 'benchFoul', team, offender: 'coach' })}>Coach T</button>
+            <button {...send({ kind: 'benchFoul', team, offender: 'bench' })}>Bench T</button>
+          </>
+        )}
       </div>
     </section>
   );
@@ -258,7 +283,24 @@ function ActionPad() {
     case 'idle':
       body = <p class="hint">Tap a player</p>;
       break;
-    case 'player':
+    case 'player': {
+      const team = state.value.roster[e.player];
+      if (team && !can.value.team(team)) {
+        body = (
+          <>
+            <p class="hint">
+              {who(e.player)}: {gi.teams[team]}'s device records their actions. Here: block, steal or assist.
+            </p>
+            <div class="grid4">
+              <button {...send({ kind: 'block' })}>BLK</button>
+              <button {...send({ kind: 'steal' })}>STL</button>
+              <button {...send({ kind: 'assist' })}>AST</button>
+              <button {...send({ kind: 'skip' })}>Cancel</button>
+            </div>
+          </>
+        );
+        break;
+      }
       body = (
         <>
           <p class="hint">{who(e.player)}</p>
@@ -282,6 +324,7 @@ function ActionPad() {
         </>
       );
       break;
+    }
     case 'shotResult':
       body = (
         <>
@@ -385,8 +428,14 @@ function FreeThrows() {
       <span>
         FT {due.next}/{due.of} · {p ? `#${p.jersey} ${p.name}` : `pick a ${info.value!.teams[due.team]} shooter`}
       </span>
-      <button class="make" {...send({ kind: 'ft', made: true })} data-testid="ft-made">Made</button>
-      <button class="miss" {...send({ kind: 'ft', made: false })} data-testid="ft-miss">Missed</button>
+      {can.value.team(due.team) ? (
+        <>
+          <button class="make" {...send({ kind: 'ft', made: true })} data-testid="ft-made">Made</button>
+          <button class="miss" {...send({ kind: 'ft', made: false })} data-testid="ft-miss">Missed</button>
+        </>
+      ) : (
+        <i class="small">{info.value!.teams[due.team]}'s device records these</i>
+      )}
     </div>
   );
 }
@@ -427,6 +476,14 @@ function Break() {
     );
   }
   const regulationOver = !!st.rules && st.period >= st.rules.periods;
+  if (!can.value.control) {
+    return (
+      <section class="break">
+        <h2>End of period {st.period}</h2>
+        <p>Waiting for the game-control device to start the next period.</p>
+      </section>
+    );
+  }
   return (
     <section class="break">
       <h2>End of period {st.period}</h2>
@@ -537,5 +594,67 @@ function Help() {
       </dl>
       <p class="small">Press ? to close</p>
     </aside>
+  );
+}
+
+/** Timeouts, possession arrow and jump ball: the game-control device only. */
+function ControlBar() {
+  const gi = info.value!;
+  const arrow = state.value.arrow;
+  const jump = (wonBy: Team) => {
+    record({ type: 'jumpBall', payload: { wonBy } });
+    record({ type: 'possessionArrow', payload: { team: wonBy === 'A' ? 'B' : 'A' } });
+  };
+  return (
+    <div class="control-bar">
+      <button {...send({ kind: 'timeout', team: 'A' })}>Timeout {gi.teams.A}</button>
+      <button {...send({ kind: 'timeout', team: 'B' })}>Timeout {gi.teams.B}</button>
+      <button {...tap(() => record({ type: 'possessionArrow', payload: { team: arrow === 'A' ? 'B' : 'A' } }))} data-testid="arrow">
+        Arrow: {arrow ? gi.teams[arrow] : '-'}
+      </button>
+      <button {...tap(() => jump('A'))}>Jump won {gi.teams.A}</button>
+      <button {...tap(() => jump('B'))}>Jump won {gi.teams.B}</button>
+    </div>
+  );
+}
+
+const ROLES: Role[] = ['teamA', 'teamB', 'clock'];
+
+/** Who holds each role; claim a free one, take over a held one (at a stoppage), or release yours. */
+function Roles() {
+  const st = state.value;
+  const stopped = !st.clock.running;
+  return (
+    <div class="roles">
+      {ROLES.map((r) => {
+        const holder = st.roles[r];
+        const mine = holder === myDevice.value;
+        return (
+          <div key={r} class="role" data-testid={`role-${r}`}>
+            <b>{roleName(r)}</b>
+            <span>{mine ? 'you' : holder ? 'another device' : 'free'}</span>
+            {!holder && <button onClick={() => claim(r)}>Claim</button>}
+            {holder && !mine && (
+              <button disabled={!stopped} title={stopped ? '' : 'Stop the clock first'} onClick={() => takeOver(r)}>
+                Take over
+              </button>
+            )}
+            {mine && <button onClick={() => release(r)}>Release</button>}
+          </div>
+        );
+      })}
+      {!stopped && <p class="small">Take-overs happen at a stoppage: stop the clock first.</p>}
+    </div>
+  );
+}
+
+function RolePicker() {
+  return (
+    <div class="pregame">
+      <h1>Pick your role</h1>
+      <p>Each role is scored on one device. Clock is optional: without it, {roleName('teamA')} runs the clock.</p>
+      {notice.value && <p class="error">{notice.value}</p>}
+      <Roles />
+    </div>
   );
 }
