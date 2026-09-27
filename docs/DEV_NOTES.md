@@ -1101,3 +1101,12 @@ players as jersey chips in two side rails, one bottom dock for everything else.
 - While the Made/Missed card is up, tapping another section moves the pending shot there
   (section, highlight and 2/3 value update). Entry machine: `court` input in the `shotResult`
   step. Unit test + e2e (tap top 3, then near the rim, "2 Made" -> one 2-point shot stored).
+
+### Technical free throws: pick the shooter first (user-reported bug)
+
+- After a coach/bench/player technical, the free throw has no fouled player; the machine needs a
+  selected player of the shooting team, but the FT bar showed live Made/Missed buttons that did
+  nothing. Now the bar reads "Technical FT: tap the <team> shooter" with Made/Missed disabled;
+  once a player of that team is tapped it shows "FT 1/1 · #7 Name" and the buttons work.
+- e2e: coach technical -> buttons disabled -> tap a Tigers player -> Made -> Tigers score 1.
+- All e2e: scorer 18, viewer 2.

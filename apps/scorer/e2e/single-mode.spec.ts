@@ -97,3 +97,18 @@ test('changing your mind: tapping another section before Made/Missed moves the s
   await expect(page.getByTestId('score-A')).toHaveText('2');
   await expect.poll(async () => (await serverEvents(g.slug)).filter((e) => e.type === 'shot').map((e) => e.payload.value)).toEqual([2]);
 });
+
+test('technical foul free throw: pick the shooter first, then Made works', async ({ page }) => {
+  const g = await createGame();
+  await joinAndStart(page, g.code);
+  await btn(page, 'Coach T').first().click(); // Lions coach technical -> 1 FT for the Tigers
+  const made = page.getByTestId('ft-made');
+  await expect(page.getByText('Technical FT: tap the Tigers shooter')).toBeVisible();
+  await expect(made).toBeDisabled();
+  await player(page, 'B', 7).click();
+  await expect(page.getByText('FT 1/1 · #7 Tiger 7')).toBeVisible();
+  await expect(made).toBeEnabled();
+  await made.click();
+  await expect(page.getByTestId('score-B')).toHaveText('1');
+  await expect(made).toHaveCount(0); // no more free throws owed
+});

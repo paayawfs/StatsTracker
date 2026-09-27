@@ -454,19 +454,33 @@ function Picker({ title, children, cols = 3 }: { title: string; children: Compon
 function FreeThrows() {
   const due = state.value.freeThrowQueue[0];
   if (!due) return null;
-  const p = due.shooter ? playersById.value.get(due.shooter) : undefined;
+  const team = info.value!.teams[due.team];
+  // Technical free throws have no fouled player: the scorer picks the shooter from that team.
+  const e = entry.value;
+  const picked = !due.shooter && e.step === 'player' && state.value.roster[e.player] === due.team ? e.player : undefined;
+  const shooter = due.shooter ?? picked;
+  const p = shooter ? playersById.value.get(shooter) : undefined;
+  const owns = can.value.team(due.team);
   return (
     <div class={`ft-bar team-${due.team}`}>
       <span>
-        <b>FT {due.next}/{due.of}</b> · {p ? `#${p.jersey} ${p.name}` : `pick a ${info.value!.teams[due.team]} shooter`}
+        {p ? (
+          <>
+            <b>FT {due.next}/{due.of}</b> · #{p.jersey} {p.name}
+          </>
+        ) : (
+          <>
+            <b>Technical FT</b>: tap the {team} shooter
+          </>
+        )}
       </span>
-      {can.value.team(due.team) ? (
+      {owns ? (
         <>
-          <button class="make" {...send({ kind: 'ft', made: true })} data-testid="ft-made">Made</button>
-          <button class="miss" {...send({ kind: 'ft', made: false })} data-testid="ft-miss">Missed</button>
+          <button class="make" disabled={!p} {...send({ kind: 'ft', made: true })} data-testid="ft-made">Made</button>
+          <button class="miss" disabled={!p} {...send({ kind: 'ft', made: false })} data-testid="ft-miss">Missed</button>
         </>
       ) : (
-        <i class="small">{info.value!.teams[due.team]}'s device records these</i>
+        <i class="small">{team}'s device records these</i>
       )}
     </div>
   );
