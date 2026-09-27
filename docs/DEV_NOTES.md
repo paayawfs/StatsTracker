@@ -655,3 +655,19 @@ persistent-storage request, tap-to-render instrumentation. `pnpm dev:game` creat
 - NBA court lines aren't modelled; the scorer flips 2/3 manually.
 - If the browser loses the anonymous Supabase session (storage cleared), rejoining creates a new
   user, and the `single` role is still held by the old one. Fix in Phase 5 with role transfer.
+
+## Phase 5: multi mode
+
+Decisions (2026-09-27): **any joined scorer may take over a role** (covers a replacement device
+that holds no role); **the game-control device picks both lineups** (Clock, else Team A).
+
+### Step 1: take-over by any joined scorer (server)
+
+- Migration `20260927120000_takeover_by_any_scorer`: in `authorize_event`, the `roleTransfer`
+  branch now runs **before** the "caller must hold `event.role`" check. A transfer must be
+  written with `event.role` = the transferred role. Membership is still required
+  (`insert_event` checks it), the target device must have joined, and the lock still applies.
+- The same path fixes the Phase 4 edge where a device that lost its session couldn't reclaim
+  `single`: it takes it over.
+- pgTAP: a device with no role takes over teamB, then writes as teamB; the old teamB device is
+  refused. 86 tests.

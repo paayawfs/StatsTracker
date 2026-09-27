@@ -1,5 +1,5 @@
 begin;
-select plan(19);
+select plan(22);
 
 select tests.game_fixture('multi') as f \gset
 select (:'f'::jsonb ->> 'game')::uuid as game, (:'f'::jsonb ->> 'admin')::uuid as admin,
@@ -47,8 +47,16 @@ select is(pg_temp.write(:'sc', tests.event(:'game', 'timeout', 'clock', '{"team"
 select is(pg_temp.write(:'sb', tests.event(:'game', 'void', 'teamB', jsonb_build_object('targetId', gen_random_uuid()))), 'ok', 'teamB may void any event');
 
 -- Transfer: C's device fails, A takes the clock role.
-select is(pg_temp.write(:'sa', tests.event(:'game', 'roleTransfer', 'teamA', '{"role":"clock","toDeviceId":"dev-a"}')), 'ok', 'A takes over the clock role');
+select is(pg_temp.write(:'sa', tests.event(:'game', 'roleTransfer', 'clock', '{"role":"clock","toDeviceId":"dev-a"}')), 'ok', 'A takes over the clock role');
 select is(pg_temp.write(:'sa', tests.event(:'game', 'clockStop', 'clock')), 'ok', 'A now writes as clock');
+
+-- A replacement device holding no role can take one over (dead device at a stoppage).
+select tests.as_postgres();
+select tests.create_user(true) as sd \gset
+insert into public.game_scorers (game_id, user_id, device_id) values (:'game', :'sd', 'dev-d');
+select is(pg_temp.write(:'sd', tests.event(:'game', 'roleTransfer', 'teamB', '{"role":"teamB","toDeviceId":"dev-d"}')), 'ok', 'a device with no role takes over teamB');
+select is(pg_temp.write(:'sd', tests.event(:'game', 'rebound', 'teamB', '{"team":"B","kind":"defensive"}')), 'ok', 'and now writes as teamB');
+select is(pg_temp.write(:'sb', tests.event(:'game', 'rebound', 'teamB', '{"team":"B","kind":"defensive"}')), '42501', 'the old teamB device no longer can');
 
 -- Lock: only admins after it.
 select is(pg_temp.write(:'admin', tests.event(:'game', 'adminLock', 'admin')), 'ok', 'admin locks the game');
