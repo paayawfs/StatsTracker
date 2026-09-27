@@ -590,3 +590,22 @@ conflict notifications, peer latency hook), deterministic network simulator. Cor
 - e2e (`apps/scorer/e2e`, Playwright against the production build + local Supabase; each test
   creates its own game): full single-mode sequence ending with every event on the server;
   play-by-play corrections; phone no-scroll.
+
+### Step 4: keyboard shortcuts
+
+- `logic/keys.ts` (pure, tested): `keyCommand(key, entry)` maps a key to an entry input or a
+  command, depending on the current step; `resolveJersey` turns typed digits into a player
+  (on-floor only, or the whole roster during a sub); `promptTeam` picks the team a jersey most
+  likely means in the current prompt (fouled player / stealer = other team, passer = shooter's
+  team, sub = subbing team).
+- Map (also shown with `?`): digits + Enter or a 400 ms pause = player, Tab = same jersey on the
+  other team; S/X 2 made/missed, D/C 3 made/missed; R V L B = rebound, assist, steal, block;
+  T/F/U = turnover/foul/sub; M/N = FT made/missed; letters inside the foul and turnover pickers
+  pick the type; 1-3 in the FT-count picker; Shift+A/B team rebound; Space clock; Z undo;
+  Esc skip/cancel; Enter confirm.
+- Keys are ignored while typing in an input, and with Ctrl/Cmd/Alt held.
+- Honesty note: `keys.ts` and its first tests were written in one pass rather than strictly
+  test-first; the follow-up fixes (Tab precedence in the shot-result step, `promptTeam`) were
+  test-first.
+- e2e: a sequence entered only from the keyboard (clock, shot + assist, shared-jersey Tab, foul ->
+  FTs, undo, help overlay).

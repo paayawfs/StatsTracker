@@ -2,9 +2,10 @@ import { effect } from '@preact/signals';
 import { render } from 'preact';
 import { App } from './app';
 import './index.css';
-import { info, tapToRender } from './session';
+import { info, onKey, tapToRender } from './session';
 
 render(<App />, document.getElementById('app')!);
+window.addEventListener('keydown', onKey);
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) void navigator.serviceWorker.register('/sw.js');
 

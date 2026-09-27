@@ -4,6 +4,7 @@ import { GameSync, LocalStore, SupabaseTransport, supabaseClientOptions } from '
 import { createClient } from '@supabase/supabase-js';
 import { remaining } from './logic/clock';
 import { idle, step, type Entry, type Input } from './logic/entry';
+import { keyCommand, promptTeam, resolveJersey } from './logic/keys';
 import { undoLast } from './logic/undo';
 
 const LOCAL_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
@@ -236,4 +237,62 @@ export function measureTap(start: number) {
       tapToRender.value = [...tapToRender.value.slice(-199), performance.now() - start];
     }),
   );
+}
+
+// ---- keyboard (laptop) --------------------------------------------------------------------------
+/** Jersey digits typed so far. */
+export const typed = signal('');
+export const showHelp = signal(false);
+/** Team a typed jersey resolves to when both teams have the number. Tab flips it. */
+export const preferTeam = signal<Team>('A');
+let jerseyTimer: ReturnType<typeof setTimeout> | undefined;
+
+function commitJersey() {
+  clearTimeout(jerseyTimer);
+  const jersey = typed.value;
+  typed.value = '';
+  if (!jersey || !info.value) return;
+  const st = state.value;
+  const prefer = promptTeam(entry.value, (id) => st.roster[id], preferTeam.value);
+  const id = resolveJersey(jersey, prefer, info.value.players, st.onFloor, entry.value.step === 'sub');
+  if (!id) return;
+  preferTeam.value = st.roster[id] ?? preferTeam.value;
+  input({ kind: 'player', id });
+}
+
+export function onKey(e: KeyboardEvent) {
+  if (e.ctrlKey || e.metaKey || e.altKey || (e.target instanceof HTMLElement && e.target.closest('input, textarea'))) return;
+  if (!info.value || state.value.phase === 'pregame') return;
+  const cmd = keyCommand(e, entry.value);
+  if (!cmd) return;
+  e.preventDefault();
+  const t = performance.now();
+  if ('digit' in cmd) {
+    typed.value += cmd.digit;
+    clearTimeout(jerseyTimer);
+    jerseyTimer = setTimeout(commitJersey, 400);
+    return;
+  }
+  if ('input' in cmd) {
+    if (typed.value) commitJersey();
+    input(cmd.input);
+  } else {
+    switch (cmd.do) {
+      case 'clock': toggleClock(); break;
+      case 'undo': undo(); break;
+      case 'help': showHelp.value = !showHelp.value; break;
+      case 'commit': commitJersey(); break;
+      case 'commitOrConfirm': if (typed.value) commitJersey(); else input({ kind: 'confirm' }); break;
+      case 'switchTeam': {
+        preferTeam.value = preferTeam.value === 'A' ? 'B' : 'A';
+        // Re-point a just-selected shared jersey at the other team.
+        const e2 = entry.value;
+        const p = e2.step === 'player' ? info.value.players.find((x) => x.id === e2.player) : undefined;
+        const twin = p && info.value.players.find((x) => x.jersey === p.jersey && x.team === preferTeam.value && state.value.onFloor[x.team].includes(x.id));
+        if (twin) input({ kind: 'player', id: twin.id });
+        break;
+      }
+    }
+  }
+  measureTap(t);
 }

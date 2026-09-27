@@ -106,3 +106,8 @@ footer .undo { flex: 1; font-weight: 700; }
   footer { padding: 6px; }
   footer button { min-height: 44px; }
 }
+.typed { font-size: 2em; font-weight: 800; margin: 0; }
+.help { position: fixed; inset: 10vh 10vw auto; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 24px; box-shadow: 0 10px 40px #000a; }
+.help dl div { display: grid; grid-template-columns: 12em 1fr; gap: 8px; padding: 3px 0; }
+.help dt { font-weight: 700; }
+.help dd { margin: 0; color: var(--muted); }

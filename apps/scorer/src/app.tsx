@@ -7,7 +7,7 @@ import { formatClock, remaining } from './logic/clock';
 import type { Input } from './logic/entry';
 import {
   checkpoint, correct, endGame, endPeriod, entry, events, info, input, join, measureTap, nextPeriod, notice, now, online,
-  pending, playersById, rejected, resume, setClock, startGame, state, tapToRender, toggleClock, undo, type Player,
+  pending, playersById, rejected, resume, setClock, showHelp, startGame, state, tapToRender, toggleClock, typed, undo, type Player,
 } from './session';
 
 /** Fire on pointerdown (not click) and record tap-to-render. */
@@ -122,6 +122,7 @@ function Live() {
         <button onClick={() => (showLog.value = !showLog.value)}>{showLog.value ? 'Hide' : 'Play-by-play'}</button>
       </footer>
       {showLog.value && <PlayByPlay />}
+      {showHelp.value && <Help />}
     </div>
   );
 }
@@ -359,6 +360,7 @@ function ActionPad() {
   }
   return (
     <section class="pad">
+      {typed.value && <p class="typed">#{typed.value}</p>}
       <FreeThrows />
       {body}
     </section>
@@ -505,3 +507,35 @@ function PlayByPlay() {
 
 const median = (xs: number[]) => (xs.length ? Math.round([...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!) : '-');
 
+
+const KEYS: [string, string][] = [
+  ['0-9 then Enter', 'pick player by jersey (Tab: other team)'],
+  ['S / X', '2 made / missed'],
+  ['D / C', '3 made / missed'],
+  ['R V L B', 'rebound, assist, steal, block'],
+  ['T / F / U', 'turnover / foul / substitution'],
+  ['M / N', 'free throw made / missed'],
+  ['Foul type', 'P personal, S shooting, O offensive, T technical, U unsportsmanlike, D disqualifying'],
+  ['Turnover type', 'B bad pass, L lost ball, T travel, D double dribble, O out, C shot clock, K backcourt, F off. foul'],
+  ['Shift+A / Shift+B', 'team rebound'],
+  ['Space', 'start / stop clock'],
+  ['Z', 'undo'],
+  ['Esc / Enter', 'skip, cancel / confirm'],
+];
+
+function Help() {
+  return (
+    <aside class="help" onClick={() => (showHelp.value = false)}>
+      <h2>Keyboard</h2>
+      <dl>
+        {KEYS.map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+      <p class="small">Press ? to close</p>
+    </aside>
+  );
+}
