@@ -671,3 +671,22 @@ that holds no role); **the game-control device picks both lineups** (Clock, else
   `single`: it takes it over.
 - pgTAP: a device with no role takes over teamB, then writes as teamB; the old teamB device is
   refused. 86 tests.
+
+### Step 2: ownership on the device
+
+- `logic/ownership.ts` (pure, tested): `ownerRole(body, state)` mirrors `authorize_event`
+  (game control -> clock if claimed else teamA; sub/rebound/turnover/foul -> payload team;
+  shot/FT -> shooter's team; corrections/checkpoints/unknown shooter -> any role).
+  `heldRoles`, `roleFor(body, state, device)` (the role to stamp, or null) and
+  `capabilities(state, device)` -> `{ team(t), control }`. The server stays authoritative; this
+  just stops the UI offering actions the server would refuse.
+- Entry machine: optional `ctx.can`. Primary actions (shot, court, rebound, turnover, foul,
+  sub) need the selected player's team; the rebound prompt accepts only owned teams (so the
+  shooting team's device records only offensive/team rebounds, decision 3); FTs need the
+  shooting team; timeout needs game control; team TO and coach/bench fouls need that team.
+  Secondary players (fouled opponent, steal, block, assist amends) still work. Without `can`,
+  everything is allowed (single mode unchanged).
+- **Test-harness bug found (fixed):** Vitest in `apps/scorer` was also collecting the
+  Playwright `e2e/*.spec.ts` files, and failing them at file level. Since Phase 4 step 3 the
+  scorer's `pnpm test` had exited non-zero, and my grep for "Tests" hid it; the unit tests
+  themselves passed. `vite.config.ts` now limits Vitest to `src/**/*.test.ts`.

@@ -42,6 +42,8 @@ export interface Ctx {
   events: readonly GameEvent[];
   /** Wrap a body in an envelope (id, device, clock...). */
   stamp: (body: EventBody) => GameEvent;
+  /** Multi mode: what this device may record. Omitted = everything (single mode). */
+  can?: { team: (t: Team) => boolean; control: boolean };
 }
 
 export const idle: Entry = { step: 'idle' };
@@ -113,21 +115,25 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
   };
 
   const selected = entry.step === 'player' ? entry.player : undefined;
+  const canTeam = (t: Team | undefined) => !!t && (ctx.can?.team(t) ?? true);
+  const canControl = ctx.can?.control ?? true;
 
   // Team-level actions and free throws work from any step.
   switch (input.kind) {
     case 'timeout':
+      if (!canControl) return done(entry);
       emit({ type: 'timeout', payload: { team: input.team } });
       return done();
     case 'teamTurnover':
-      return done({ step: 'turnoverKind', team: input.team });
+      return done(canTeam(input.team) ? { step: 'turnoverKind', team: input.team } : entry);
     case 'benchFoul':
+      if (!canTeam(input.team)) return done(entry);
       emit(foulBody({ team: input.team, offender: input.offender, kind: 'technical', freeThrows: state.rules?.technicalFreeThrows ?? 1 }));
       return done();
     case 'ft': {
       const due = state.freeThrowQueue[0];
       const shooter = due?.shooter ?? (selected && teamOf(selected) === due?.team ? selected : undefined);
-      if (!due || !shooter) return done(entry);
+      if (!due || !shooter || !canTeam(due.team)) return done(entry);
       emit({ type: 'freeThrow', payload: { shooter, made: input.made, attempt: due.next, of: due.of } });
       return done(!input.made && due.next === due.of ? { step: 'rebound', shooterTeam: due.team } : idle);
     }
@@ -145,12 +151,12 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
     }
     case 'rebound': {
       const kind = (t: Team) => (t === entry.shooterTeam ? 'offensive' : 'defensive');
-      if (input.kind === 'player' && onFloor(input.id)) {
+      if (input.kind === 'player' && onFloor(input.id) && canTeam(teamOf(input.id))) {
         const t = teamOf(input.id)!;
         emit({ type: 'rebound', payload: { team: t, player: input.id, kind: kind(t) } });
         return done();
       }
-      if (input.kind === 'team') {
+      if (input.kind === 'team' && canTeam(input.team)) {
         emit({ type: 'rebound', payload: { team: input.team, kind: kind(input.team) } });
         return done();
       }
@@ -210,6 +216,9 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
   if (input.kind === 'skip') return done();
   const team = selected ? teamOf(selected) : undefined;
   if (!selected || !team) return done(entry);
+  // Primary actions belong to the selected player's team; amends (block/steal/assist) don't.
+  const primary = ['shot', 'court', 'rebound', 'turnover', 'foul', 'sub'].includes(input.kind);
+  if (primary && !canTeam(team)) return done(entry);
 
   switch (input.kind) {
     case 'shot':

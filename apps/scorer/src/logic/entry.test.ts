@@ -226,3 +226,55 @@ describe('team actions', () => {
     expect(bodies(run({ kind: 'timeout', team: 'B' }).emitted)).toEqual([{ type: 'timeout', payload: { team: 'B' } }]);
   });
 });
+
+describe('ownership (multi mode)', () => {
+  // This device scores team A only; team B has its own device.
+  type Can = { team: (t: string) => boolean; control: boolean };
+  const teamA: Can = { team: (t) => t === 'A', control: false };
+  function runAs(can: Can, ...inputs: Input[]) {
+    let entry: Entry = idle;
+    const emitted: GameEvent[] = [];
+    for (const input of inputs) {
+      const r = step(entry, input, { state: replay(log), events: log, stamp, can });
+      entry = r.entry;
+      emitted.push(...r.events);
+      log.push(...r.events);
+    }
+    return { entry, emitted };
+  }
+
+  test('primary actions for the other team are not recorded', () => {
+    expect(runAs(teamA, p('b1'), { kind: 'shot', value: 2, made: true }).emitted).toEqual([]);
+    expect(runAs(teamA, p('b1'), { kind: 'foul' }).entry).toEqual({ step: 'player', player: 'b1' });
+  });
+
+  test('rebound prompt on the shooting team device accepts only its own rebounders', () => {
+    const r = runAs(teamA, p('a1'), { kind: 'shot', value: 2, made: false }, p('b2'));
+    expect(r.emitted).toHaveLength(1); // just the shot
+    expect(r.entry).toEqual({ step: 'player', player: 'b2' });
+    const off = runAs(teamA, p('a1'), { kind: 'shot', value: 2, made: false }, p('a3'));
+    expect(off.emitted.at(-1)).toMatchObject({ type: 'rebound', payload: { team: 'A', kind: 'offensive' } });
+  });
+
+  test('secondary players still work: fouled opponent, steal, block', () => {
+    const foul = runAs(teamA, p('a1'), { kind: 'foul' }, { kind: 'foulKind', value: 'personal' }, p('b1'));
+    expect(foul.emitted[0]).toMatchObject({ type: 'foul', payload: { team: 'A', fouled: 'b1' } });
+    const to = runAs(teamA, p('a2'), { kind: 'turnover' }, { kind: 'turnoverKind', value: 'badPass' }, p('b3'));
+    expect(to.emitted[1]).toMatchObject({ type: 'amend', payload: { body: { payload: { steal: 'b3' } } } });
+  });
+
+  test('free throws only for teams this device owns', () => {
+    // B's device records B's foul; the FT queue is for team A.
+    const bDevice: Can = { team: (t) => t === 'B', control: false };
+    runAs(bDevice, p('b1'), { kind: 'foul' }, { kind: 'foulKind', value: 'shooting' }, p('a1'), { kind: 'ftCount', n: 2 });
+    expect(runAs(bDevice, { kind: 'ft', made: true }).emitted).toEqual([]);
+    expect(runAs(teamA, { kind: 'ft', made: true }).emitted[0]).toMatchObject({ type: 'freeThrow', payload: { shooter: 'a1' } });
+  });
+
+  test('team actions respect ownership and game control', () => {
+    expect(runAs(teamA, { kind: 'timeout', team: 'A' }).emitted).toEqual([]); // timeouts are game control
+    expect(runAs({ ...teamA, control: true }, { kind: 'timeout', team: 'B' }).emitted).toHaveLength(1);
+    expect(runAs(teamA, { kind: 'benchFoul', team: 'B', offender: 'coach' }).emitted).toEqual([]);
+    expect(runAs(teamA, { kind: 'teamTurnover', team: 'B' }).entry).toEqual(idle);
+  });
+});
