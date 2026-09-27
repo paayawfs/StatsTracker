@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { shotValue } from './court';
+import { shotValue, shotZone } from './court';
 
 // Half court, normalised: x 0..1 across the 15 m width, y 0..1 from the baseline to half court (14 m).
 const m = (xm: number, ym: number) => [xm / 15, ym / 14] as const;
@@ -23,5 +23,20 @@ describe('shotValue (FIBA geometry)', () => {
   });
   test('half court is a 3', () => {
     expect(shotValue(...m(7.5, 13.9))).toBe(3);
+  });
+});
+
+describe('shotZone', () => {
+  test('paint: inside the key', () => {
+    expect(shotZone(...m(7.5, 1.575))).toBe('paint');
+    expect(shotZone(...m(9.8, 5.5))).toBe('paint');
+  });
+  test('mid-range: a 2 outside the key', () => {
+    expect(shotZone(...m(7.5, 1.575 + 6.0))).toBe('midRange');
+    expect(shotZone(...m(11, 1))).toBe('midRange');
+  });
+  test('corner 3 and above-the-break 3', () => {
+    expect(shotZone(...m(0.5, 1))).toBe('corner3');
+    expect(shotZone(...m(7.5, 10))).toBe('aboveBreak3');
   });
 });

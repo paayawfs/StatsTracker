@@ -14,3 +14,14 @@ export function shotValue(x: number, y: number): 2 | 3 {
   if (ym <= CORNER_Y) return Math.abs(dx) >= WIDTH / 2 - CORNER_X ? 3 : 2;
   return Math.hypot(dx, ym - BASKET_Y) > ARC ? 3 : 2;
 }
+
+export type ShotZone = 'paint' | 'midRange' | 'corner3' | 'aboveBreak3';
+const KEY_HALF_WIDTH = 2.45; // FIBA restricted area (key) is 4.9 m wide
+const FT_LINE = 5.8; // key depth from the baseline
+
+export function shotZone(x: number, y: number): ShotZone {
+  const dx = Math.abs((x - 0.5) * WIDTH);
+  const ym = y * HALF;
+  if (shotValue(x, y) === 3) return ym <= CORNER_Y ? 'corner3' : 'aboveBreak3';
+  return dx <= KEY_HALF_WIDTH && ym <= FT_LINE ? 'paint' : 'midRange';
+}

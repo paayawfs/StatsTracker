@@ -792,3 +792,18 @@ possession estimates); the box score includes FIBA efficiency (EFF).
 - Tests: exact units and on/off splits for the fixture; properties on random logs (per team,
   lineup minutes = time played and lineup +/- sum = score margin; per player, on + off = whole
   game).
+
+### Step 3: shot chart and play-by-play (core)
+
+- Court geometry moved from the scorer into core (`court.ts`): `shotValue` plus new
+  `shotZone(x, y)` -> `paint` (inside the 4.9 m key, up to the FT line) / `midRange` /
+  `corner3` / `aboveBreak3`.
+- `stats/shots.ts`: `shotChart(events)` -> located shots (team, zone, made, period, clock) and
+  made/attempted per zone per team. Shots without x/y are not charted (they still count in
+  the box score).
+- `stats/pbp.ts`: `describe(event, who)` (moved from the scorer; `who(id)` formats names, so
+  each app picks its style) and `playByPlay(events, who)` -> viewer rows with the running
+  score and the team that scored. It hides bookkeeping (role events, corrections, clock
+  start/stop, checkpoints, arrow).
+- The scorer now uses core's `shotValue` and `describe`, so there's one copy of each. Scorer e2e
+  (11) still passes.

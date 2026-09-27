@@ -1,8 +1,7 @@
 import { useComputed, useSignal } from '@preact/signals';
-import { FOUL_KINDS, teamFoulCount, timeoutsAllowed, type GameEvent, type Role, type Team } from '@stats/core';
+import { describe as describeEvent, FOUL_KINDS, teamFoulCount, timeoutsAllowed, type GameEvent, type Role, type Team } from '@stats/core';
 import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
-import { describe } from './describe';
 import { formatClock, remaining } from './logic/clock';
 import type { Input } from './logic/entry';
 import {
@@ -561,6 +560,13 @@ function PlayByPlay() {
     </aside>
   );
 }
+
+/** Play-by-play text with '#jersey name' for players. */
+const describe = (e: GameEvent, players: Map<string, Player>) =>
+  describeEvent(e, (id) => {
+    const p = id ? players.get(id) : undefined;
+    return p ? `#${p.jersey} ${p.name}` : 'team';
+  });
 
 const median = (xs: number[]) => (xs.length ? Math.round([...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!) : '-');
 
