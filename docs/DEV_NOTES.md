@@ -891,3 +891,15 @@ will be restyled with the scorer once a visual direction is picked.
 - pgTAP `08_admin` (11 tests). Test-side fixes on the way: read `auth.users` before logging in;
   Postgres rounds a float 12.5 half-to-even (compare the exact value); log in as the scorer before
   testing `record_latency` validation. Total pgTAP: 98.
+
+### Step 2: season totals, CSV export, latency summary (core)
+
+- `stats/season.ts`:
+  - `seasonTotals(games)` with `games = [{ gameId, teams: {A: teamId, B: teamId}, events }]`:
+    player totals + `gp` (got on the floor or recorded a stat) + per-game averages; team records
+    keyed by the **real team id** (a club is A in one game and B in the next) with gp, wins,
+    losses, points for/against. Unfinished games count as played, not as a win or loss.
+  - `eventsCsv(events)`: raw export, envelope columns + `payload` as JSON, RFC 4180 quoting,
+    CRLF; unconfirmed events have an empty `seq`.
+  - `summarize(samples)`: n, p50, p95, max (for the latency dashboard).
+- 9 tests; core total 183.

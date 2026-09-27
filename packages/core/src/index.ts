@@ -10,3 +10,4 @@ export * from './court';
 export * from './stats/shots';
 export * from './stats/pbp';
 export * from './clock';
+export * from './stats/season';
