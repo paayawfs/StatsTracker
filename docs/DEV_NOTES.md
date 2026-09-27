@@ -912,3 +912,52 @@ will be restyled with the scorer once a visual direction is picked.
 - Session: every tap-to-render sample (`measureTap`) and every peer fast-path receipt
   (`onPeerLatency`) is added; flushed every 15 s and when the app goes to the background, via
   `record_latency`. `window.__scorer.flushLatency()` for e2e.
+
+### Step 4: admin screens (`/admin` in the scorer app)
+
+- Loaded lazily (`import()` on `/admin`): the scorer bundle stays at 85 KB gzip, admin is a
+  separate 7.5 KB chunk. `apps/scorer/vercel.json` rewrites `/admin*` to `index.html`.
+- **Separate Supabase session** (`storageKey: 'stats-admin-auth'`), so an admin signing in on a
+  scorer's device never replaces the scorer's anonymous session.
+- Screens: sign in / create account (email + password) -> your leagues (create) -> league tabs:
+  - **Games**: list; create (teams, season, rule set, one device / several devices, tip-off, shot
+    locations). The roster is pre-filled from both teams (default jersey, else the next free
+    number).
+  - **Teams & players**: add teams; paste players one per line ("23 Kofi Mensah", "#7 Ama",
+    "4. Yaw", or just a name) (`parsePlayers`, 3 tests).
+  - **Seasons**, **Rule sets** (new from FIBA/NBA, edit the main numbers, validated with
+    `RuleSetSchema` before saving), **Admins** (add by account email), **Season stats**
+    (standings W-L, points for/against; player per-game averages over every game in the season).
+  - **Game page**: viewer link, scorer codes (create, revoke), per-game jersey edits before tip-off,
+    **lock** (with an in-page confirm), **CSV / JSON export** of the corrected log, **latency
+    dashboard** (all devices and per device, tap -> own screen and tap -> other device: n,
+    median, p95 in red when over budget (50 / 300 ms), max), and play-by-play with data-quality
+    flags and admin corrections (remove, made/missed, 2/3), which still work after the lock.
+- Admin writes go straight to `insert_event` with role `admin` (online only; no outbox needed).
+- `VITE_PUBLIC_URL` sets the viewer base for links (default `http://localhost:5174`).
+
+### Step 5: admin e2e
+
+- `e2e/admin.spec.ts`: create account -> league -> FIBA rule set -> season -> two teams with pasted
+  rosters -> game -> scorer code; a scorer joins with it and scores; the admin sees the live score
+  and latency rows, exports CSV (header and a `shot` row checked), locks the game (the scorer's next
+  event is refused with "game is locked"), corrects a shot after the lock, sees the player in season
+  stats, and gets a clear message for an unknown co-admin email.
+
+## Phase 7 report
+
+**Built:** admin app (leagues, rule sets, seasons, teams/players, games/rosters, codes, lock,
+corrections, CSV/JSON export, season stats, co-admins, latency dashboard), latency upload from
+scorer devices, `seasonTotals` / `eventsCsv` / `summarize` in core, migration `*_admin`.
+
+**Verified:** unit core 183, sync 49, scorer 77, public 3; pgTAP 98; e2e scorer 15 (incl. admin
+journey) + viewer 2; typecheck clean.
+
+**Not verified / open:**
+- The `*_admin` migration is not yet on the hosted project.
+- Hosted Supabase requires email confirmation for new accounts by default: new admins must
+  confirm from the email (or turn confirmation off in the dashboard).
+- No email invites; co-admins must create an account first.
+- Refused events stay on the device that recorded them (no admin re-entry flow).
+- Admin screens use the current look and will be restyled with the scorer's new direction.
+- Latency warm-up: first 1-2 taps after load are slower (see landscape notes).

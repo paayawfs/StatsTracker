@@ -72,6 +72,9 @@ importers:
       preact:
         specifier: ^10.29.8
         version: 10.29.8
+      valibot:
+        specifier: ^1.5.0
+        version: 1.5.0(typescript@7.0.2)
     devDependencies:
       '@playwright/test':
         specifier: ^1.63.0

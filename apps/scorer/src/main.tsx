@@ -4,8 +4,11 @@ import { App } from './app';
 import './index.css';
 import { flushLatency, info, onKey, peerLatency, tapToRender } from './session';
 
-render(<App />, document.getElementById('app')!);
-window.addEventListener('keydown', onKey);
+const admin = location.pathname.startsWith('/admin');
+// Admin screens load only on /admin, so scorers never download them.
+if (admin) void import('./admin/app').then(({ Admin }) => render(<Admin />, document.getElementById('app')!));
+else render(<App />, document.getElementById('app')!);
+if (!admin) window.addEventListener('keydown', onKey);
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) void navigator.serviceWorker.register('/sw.js');
 
