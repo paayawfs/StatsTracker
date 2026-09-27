@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { btn, createGame, device, pickStartersAndStart, player, serverEvents } from './fixtures';
+import { btn, createGame, device, pickStartersAndStart, player, serverEvents, menu } from './fixtures';
 
 test('three devices: clock device runs the game, split rebound and free-throw prompts, peer latency', async ({ browser }) => {
   const g = await createGame(false, 'multi');
@@ -36,7 +36,7 @@ test('three devices: clock device runs the game, split rebound and free-throw pr
 
   // A device selecting an opponent only gets the secondary actions.
   await player(a.page, 'B', 4).click();
-  await expect(btn(a.page, '2 ✓')).toHaveCount(0);
+  await expect(btn(a.page, '2 ✓')).toBeDisabled(); // opponent selected: no primary actions here
   await expect(btn(a.page, 'BLK')).toBeVisible();
   await btn(a.page, 'Cancel').click();
 
@@ -88,7 +88,7 @@ test('a dead device: another device takes over its role at a stoppage', async ({
   await a.context.close(); // A's phone dies
 
   // B takes over team A and becomes the only device (multi -> single fallback).
-  await btn(b.page, 'Roles').click();
+  await menu(b.page, 'Roles');
   await b.page.getByTestId('role-teamA').getByRole('button', { name: 'Take over' }).click();
   await expect(b.page.getByTestId('role-teamA')).toContainText('you');
   await btn(b.page, 'Close').click();
@@ -116,7 +116,7 @@ test('concurrent amendments: both scorers are told, last write wins everywhere',
 
   // Both open the play-by-play and correct the same shot differently at the same time.
   for (const d of [a, b]) {
-    await btn(d.page, 'Play-by-play').click();
+    await menu(d.page, 'Play-by-play');
     await d.page.getByTestId('pbp').getByText('2PT made').click();
   }
   await Promise.all([btn(a.page, 'Make it 3PT').click(), btn(b.page, 'Mark missed').click()]);

@@ -71,3 +71,9 @@ export async function device(browser: Browser, code: string, role: 'teamA' | 'te
 
 export const player = (page: Page, team: 'A' | 'B', jersey: number) => page.getByTestId(`player-${team}-${jersey}`);
 export const btn = (page: Page, name: string) => page.getByRole('button', { name, exact: true });
+
+/** Open the ☰ menu and pick an item (Play-by-play, End period, Roles, ...). */
+export async function menu(page: Page, item: string) {
+  await page.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('button', { name: item, exact: true }).click();
+}

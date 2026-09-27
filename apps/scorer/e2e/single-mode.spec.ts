@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { btn, createGame, joinAndStart, player, serverEvents } from './fixtures';
+import { btn, createGame, joinAndStart, player, serverEvents, menu } from './fixtures';
 
 test('a full single-mode sequence: shots, assist, rebound, foul + free throws, sub, undo, period end', async ({ page }) => {
   const g = await createGame();
@@ -51,7 +51,7 @@ test('a full single-mode sequence: shots, assist, rebound, foul + free throws, s
   await expect(player(page, 'A', 9)).toHaveCount(0);
 
   // End the period and reconcile against the scoreboard.
-  await btn(page, 'End period').click();
+  await menu(page, 'End period');
   await expect(page.getByText('End of period 1')).toBeVisible();
   await btn(page, 'Confirm score').click();
   await btn(page, 'Start period 2').click();
@@ -73,7 +73,7 @@ test('corrections from the play-by-play', async ({ page }) => {
   await btn(page, 'Skip').click();
   await expect(page.getByTestId('score-A')).toHaveText('2');
 
-  await btn(page, 'Play-by-play').click();
+  await menu(page, 'Play-by-play');
   await page.getByTestId('pbp').getByText('2PT made').click();
   await btn(page, 'Make it 3PT').click();
   await expect(page.getByTestId('score-A')).toHaveText('3');

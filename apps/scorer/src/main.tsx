@@ -1,6 +1,9 @@
 import { effect } from '@preact/signals';
 import { render } from 'preact';
 import { App } from './app';
+import '@fontsource-variable/figtree';
+import '@fontsource/barlow-condensed/latin-700.css';
+import '@fontsource/barlow-condensed/latin-800.css';
 import './index.css';
 import { flushLatency, info, onKey, peerLatency, tapToRender } from './session';
 

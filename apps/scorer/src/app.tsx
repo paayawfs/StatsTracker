@@ -1,8 +1,8 @@
 import { useComputed, useSignal } from '@preact/signals';
-import { describe as describeEvent, FOUL_KINDS, teamFoulCount, timeoutsAllowed, type GameEvent, type Role, type Team } from '@stats/core';
-import type { JSX } from 'preact';
+import { describe as describeEvent, formatClock, FOUL_KINDS, remaining, shotZone, teamFoulCount, timeoutsAllowed, ZONES, type GameEvent, type Role, type Team } from '@stats/core';
+import { Court, toScreen } from '@stats/ui';
+import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
-import { formatClock, remaining } from '@stats/core';
 import type { Input } from './logic/entry';
 import {
   can, checkpoint, claim, correct, endGame, endPeriod, entry, events, info, input, join, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
@@ -19,6 +19,8 @@ const tap = (fn: () => void) => ({
   },
 });
 const send = (i: Input) => tap(() => input(i));
+const other = (t: Team): Team => (t === 'A' ? 'B' : 'A');
+const lastName = (name: string) => name.split(' ').slice(-1)[0] ?? name;
 
 export function App() {
   const ready = useSignal(false);
@@ -31,6 +33,8 @@ export function App() {
   if (state.value.phase === 'pregame') return <Pregame />;
   return <Live />;
 }
+
+// ---- before the game ---------------------------------------------------------------------------
 
 function Join() {
   const code = useSignal('');
@@ -49,14 +53,14 @@ function Join() {
     }
   };
   return (
-    <form class="join" onSubmit={submit}>
-      <h1>Scorer</h1>
-      <label>
-        Game code
-        <input value={code.value} onInput={(e) => (code.value = e.currentTarget.value.toUpperCase())} autoFocus autocomplete="off" maxLength={8} />
-      </label>
-      <button disabled={busy.value || code.value.length < 8}>{busy.value ? 'Joining…' : 'Join game'}</button>
+    <form class="sheet join" onSubmit={submit}>
+      <p class="eyebrow">Scorer</p>
+      <h1>Join a game</h1>
+      <label for="code">Game code</label>
+      <input id="code" class="code-input" value={code.value} onInput={(e) => (code.value = e.currentTarget.value.toUpperCase())} autoFocus autocomplete="off" maxLength={8} placeholder="8 letters" />
+      <button class="primary big" disabled={busy.value || code.value.length < 8}>{busy.value ? 'Joining…' : 'Join game'}</button>
       {error.value && <p class="error">{error.value}</p>}
+      <p class="small">The league admin gives you the code. No account needed.</p>
     </form>
   );
 }
@@ -71,101 +75,100 @@ function Pregame() {
   const ok = starters.value.A.length === 5 && starters.value.B.length === 5;
   if (!can.value.control) {
     return (
-      <div class="pregame">
+      <div class="sheet wide">
+        <p class="eyebrow">You score {myRoles.value.map(roleName).join(' and ')}</p>
         <h1>Waiting for the game to start</h1>
-        <p>
-          You score {myRoles.value.map(roleName).join(' and ')}. The {state.value.roles.clock ? 'Clock' : roleName('teamA')} device picks the
-          starters and starts the game.
-        </p>
+        <p>The {state.value.roles.clock ? 'Clock' : roleName('teamA')} device picks the starters and starts the game.</p>
         <Roles />
       </div>
     );
   }
   return (
-    <div class="pregame">
+    <div class="sheet wide pregame">
+      <p class="eyebrow">Before tip-off</p>
       <h1>Confirm starters</h1>
-      <div class="teams">
+      <div class="pregame-teams">
         {(['A', 'B'] as const).map((t) => (
-          <section key={t}>
+          <section key={t} class={`team-${t}`}>
             <h2>
-              {gi.teams[t]} <small>{starters.value[t].length}/5</small>
+              {gi.teams[t]} <span class={starters.value[t].length === 5 ? 'count ok' : 'count'}>{starters.value[t].length}/5</span>
             </h2>
-            {gi.players.filter((p) => p.team === t).map((p) => (
-              <button key={p.id} class={starters.value[t].includes(p.id) ? 'player on' : 'player'} onClick={() => toggle(p)} data-testid={`starter-${p.jersey}-${t}`}>
-                <b>{p.jersey}</b> {p.name}
-              </button>
-            ))}
+            <div class="chip-grid">
+              {gi.players.filter((p) => p.team === t).map((p) => (
+                <button key={p.id} class={starters.value[t].includes(p.id) ? 'chip on' : 'chip'} onClick={() => toggle(p)} data-testid={`starter-${p.jersey}-${t}`}>
+                  <b>{p.jersey}</b>
+                  <span>{lastName(p.name)}</span>
+                </button>
+              ))}
+            </div>
           </section>
         ))}
       </div>
-      <button class="primary" disabled={!ok} onClick={() => startGame(starters.value)}>
+      <button class="primary big" disabled={!ok} onClick={() => startGame(starters.value)}>
         Start game
       </button>
-      {!ok && <p>Pick exactly 5 starters for each team.</p>}
+      {!ok && <p class="small">Pick exactly 5 starters for each team.</p>}
     </div>
   );
 }
+
+// ---- live ---------------------------------------------------------------------------------------
 
 function Live() {
   const phase = state.value.phase;
-  const showLog = useSignal(false);
-  const showRoles = useSignal(false);
+  const panel = useSignal<'none' | 'log' | 'roles' | 'menu'>('none');
+  const toggle = (p: typeof panel.value) => (panel.value = panel.value === p ? 'none' : p);
+  // Notices sit above the dock (never over the clock) and clear themselves.
+  useEffect(() => {
+    if (!notice.value) return;
+    const t = setTimeout(() => (notice.value = null), 6000);
+    return () => clearTimeout(t);
+  }, [notice.value]);
   return (
     <div class="live">
-      <Scoreboard />
-      {phase === 'live' && can.value.control && <ControlBar />}
+      <Rail team="A" />
+      <main class="center">
+        <TopBar />
+        <div class="stage">{phase === 'live' ? <Stage /> : <Break />}</div>
+      </main>
+      <Rail team="B" />
+      <Dock menu={() => toggle('menu')} />
       {notice.value && (
-        <div class="notice" onClick={() => (notice.value = null)}>
+        <div class="toast" role="status" onClick={() => (notice.value = null)}>
           {notice.value}
         </div>
       )}
-      {phase === 'live' ? (
-        <main class="court-layout">
-          <TeamPanel team="A" />
-          <ActionPad />
-          <TeamPanel team="B" />
-        </main>
-      ) : (
-        <Break />
+      {panel.value === 'menu' && <Menu close={() => (panel.value = 'none')} open={(p) => (panel.value = p)} />}
+      {panel.value === 'log' && (
+        <Drawer title="Play-by-play" close={() => (panel.value = 'none')}>
+          <PlayByPlay />
+        </Drawer>
       )}
-      <footer>
-        <button class="undo" {...tap(undo)} data-testid="undo">
-          Undo
-        </button>
-        {phase === 'live' && can.value.control && <button onClick={endPeriod}>End period</button>}
-        {info.value!.mode === 'multi' && <button onClick={() => (showRoles.value = !showRoles.value)}>Roles</button>}
-        <button onClick={() => (showLog.value = !showLog.value)}>{showLog.value ? 'Hide' : 'Play-by-play'}</button>
-      </footer>
-      {showLog.value && <PlayByPlay />}
-      {showHelp.value && <Help />}
-      {showRoles.value && (
-        <aside class="help">
+      {panel.value === 'roles' && (
+        <Drawer title="Roles" close={() => (panel.value = 'none')}>
           <Roles />
-          <button onClick={() => (showRoles.value = false)}>Close</button>
-        </aside>
+        </Drawer>
       )}
+      {showHelp.value && <Help />}
     </div>
   );
 }
 
-function Scoreboard() {
-  const gi = info.value!;
+function TopBar() {
   const clock = useComputed(() => formatClock(remaining(state.value.clock, now.value)));
+  const st = state.value;
   return (
-    <header class="scoreboard">
-      <TeamScore team="A" name={gi.teams.A} />
-      <div class="clock">
-        <button class={state.value.clock.running ? 'time running' : 'time'} {...tap(toggleClock)} data-testid="clock">
-          {clock}
-        </button>
-        <span>
-          P{state.value.period} · {online.value ? 'online' : 'offline'}
-          {pending.value ? ` · ${pending.value} to sync` : ''}
-        </span>
-        {can.value.control && <ClockAdjust />}
-      </div>
-      <TeamScore team="B" name={gi.teams.B} />
-    </header>
+    <div class="topbar">
+      <span class="period">{st.period > (st.rules?.periods ?? 4) ? `OT${st.period - (st.rules?.periods ?? 4)}` : `P${st.period}`}</span>
+      <button class={st.clock.running ? 'clock running' : 'clock'} {...tap(toggleClock)} data-testid="clock" aria-label={st.clock.running ? 'Stop clock' : 'Start clock'}>
+        {clock}
+      </button>
+      <span class={online.value ? 'net on' : 'net'}>
+        {online.value ? 'online' : 'offline'}
+        {pending.value ? ` · ${pending.value} to sync` : ''}
+      </span>
+      {can.value.control && <ClockAdjust />}
+    </div>
   );
 }
 
@@ -181,14 +184,19 @@ function ClockAdjust() {
   };
   return (
     <span class="clock-set">
-      <input value={value.value} onInput={(e) => (value.value = e.currentTarget.value)} size={5} />
+      <input id="clock-set" aria-label="Game clock" value={value.value} onInput={(e) => (value.value = e.currentTarget.value)} size={5} />
       <button onClick={apply}>ok</button>
     </span>
   );
 }
 
-function TeamScore({ team, name }: { team: Team; name: string }) {
+/** One team: score, jersey chips (on floor; whole roster during a sub), fouls/timeouts, team actions. */
+function Rail({ team }: { team: Team }) {
+  const gi = info.value!;
   const score = useComputed(() => state.value.score[team]);
+  const lineup = useComputed(() => state.value.onFloor[team].join(','));
+  const subbing = useComputed(() => entry.value.step === 'sub' && entry.value.team === team);
+  const rebounding = useComputed(() => entry.value.step === 'rebound');
   const fouls = useComputed(() => teamFoulCount(state.value, team));
   const bonus = useComputed(() => {
     const r = state.value.rules;
@@ -200,66 +208,53 @@ function TeamScore({ team, name }: { team: Team; name: string }) {
     const w = timeoutsAllowed(r, state.value.period);
     return w.count - w.periods.reduce((n, p) => n + (state.value.timeouts[team][p] ?? 0), 0);
   });
+  const ids = subbing.value ? gi.players.filter((p) => p.team === team).map((p) => p.id) : lineup.value.split(',').filter(Boolean);
+  const owns = can.value.team(team);
+  const live = state.value.phase === 'live';
   return (
-    <div class={`team-score team-${team}`}>
-      <span class="name">{name}</span>
-      <span class="score" data-testid={`score-${team}`}>
-        {score}
-      </span>
-      <span class="meta">
-        Fouls {fouls}
-        {bonus.value && <b> BONUS</b>} · TO left {timeouts}
-      </span>
-    </div>
-  );
-}
-
-function TeamPanel({ team }: { team: Team }) {
-  const lineup = useComputed(() => state.value.onFloor[team].join(','));
-  const subbing = useComputed(() => entry.value.step === 'sub' && entry.value.team === team);
-  const rebounding = useComputed(() => entry.value.step === 'rebound');
-  const ids = subbing.value
-    ? info.value!.players.filter((p) => p.team === team).map((p) => p.id)
-    : lineup.value.split(',').filter(Boolean);
-  return (
-    <section class={`team team-${team}${subbing.value ? " subbing" : ""}`}>
-      <div class="players">
+    <section class={`rail team-${team}${subbing.value ? ' subbing' : ''}`}>
+      <header>
+        <span class="tname">{gi.teams[team]}</span>
+        <b class="score" data-testid={`score-${team}`}>{score}</b>
+      </header>
+      <div class="chips">
         {ids.map((id) => (
-          <PlayerButton key={id} id={id} />
+          <Chip key={id} id={id} />
         ))}
       </div>
-      <div class="team-actions">
-        {can.value.team(team) && (
-          <>
-            {rebounding.value && <button {...send({ kind: 'team', team })}>Team REB</button>}
-            <button {...send({ kind: 'teamTurnover', team })}>Team TO</button>
-            <button {...send({ kind: 'benchFoul', team, offender: 'coach' })}>Coach T</button>
-            <button {...send({ kind: 'benchFoul', team, offender: 'bench' })}>Bench T</button>
-          </>
-        )}
-      </div>
+      <p class="meta">
+        Fouls {fouls}
+        {bonus.value && <b class="bonus">BONUS</b>} · TO {timeouts}
+      </p>
+      {live && (
+        <div class="team-actions">
+          {owns && rebounding.value && <button class="accent" {...send({ kind: 'team', team })}>Team REB</button>}
+          {can.value.control && <button {...send({ kind: 'timeout', team })} aria-label={`Timeout ${gi.teams[team]}`}>Timeout</button>}
+          {owns && <button {...send({ kind: 'teamTurnover', team })}>Team TO</button>}
+          {owns && <button {...send({ kind: 'benchFoul', team, offender: 'coach' })}>Coach T</button>}
+          {owns && <button {...send({ kind: 'benchFoul', team, offender: 'bench' })}>Bench T</button>}
+        </div>
+      )}
     </section>
   );
 }
 
-function PlayerButton({ id }: { id: string }) {
+function Chip({ id }: { id: string }) {
   const p = playersById.value.get(id);
   const fouls = useComputed(() => state.value.personalFouls[id] ?? 0);
   const cls = useComputed(() => {
     const e = entry.value;
     const onFloor = state.value.onFloor.A.includes(id) || state.value.onFloor.B.includes(id);
-    const picked =
-      (e.step === 'player' && e.player === id) ||
-      (e.step === 'sub' && (e.out.includes(id) || e.in.includes(id)));
+    const picked = (e.step === 'player' && e.player === id) || (e.step === 'sub' && (e.out.includes(id) || e.in.includes(id)));
     const out = !!state.value.rules && fouls.value >= state.value.rules.personalFoulLimit;
-    return ['player', picked && 'on', !onFloor && 'bench', out && 'fouled-out'].filter(Boolean).join(' ');
+    return ['chip', picked && 'on', !onFloor && 'bench', out && 'fouled-out'].filter(Boolean).join(' ');
   });
   if (!p) return null;
   return (
-    <button class={cls} {...send({ kind: 'player', id })} data-testid={`player-${p.team}-${p.jersey}`}>
+    <button class={cls} {...send({ kind: 'player', id })} data-testid={`player-${p.team}-${p.jersey}`} aria-label={`#${p.jersey} ${p.name}`}>
       <b>{p.jersey}</b>
-      <span>{p.name}</span>
-      <i class="fouls">{'●'.repeat(fouls.value)}</i>
+      <span>{lastName(p.name)}</span>
+      {fouls.value > 0 && <i class="pf" aria-label={`${fouls.value} fouls`}>{'•'.repeat(fouls.value)}</i>}
     </button>
   );
 }
@@ -270,150 +265,182 @@ const TURNOVERS = [
   ['shotClock', 'Shot clock'], ['backcourt', 'Backcourt'], ['offensiveFoul', 'Off. foul'],
 ] as const;
 
-function ActionPad() {
+const who = (id: string) => {
+  const p = playersById.value.get(id);
+  return p ? `#${p.jersey} ${p.name}` : '';
+};
+
+/** The centre: the court (or shot buttons), prompts, pickers and the substitution panel. */
+function Stage() {
   const e = entry.value;
   const gi = info.value!;
-  const who = (id: string) => {
-    const p = playersById.value.get(id);
-    return p ? `#${p.jersey} ${p.name}` : '';
-  };
-  let body: JSX.Element;
+  let overlay: JSX.Element | null = null;
+  let hint: ComponentChildren = null;
+
   switch (e.step) {
     case 'idle':
-      body = <p class="hint">Tap a player</p>;
+      hint = 'Tap a player';
       break;
     case 'player': {
       const team = state.value.roster[e.player];
-      if (team && !can.value.team(team)) {
-        body = (
-          <>
-            <p class="hint">
-              {who(e.player)}: {gi.teams[team]}'s device records their actions. Here: block, steal or assist.
-            </p>
-            <div class="grid4">
-              <button {...send({ kind: 'block' })}>BLK</button>
-              <button {...send({ kind: 'steal' })}>STL</button>
-              <button {...send({ kind: 'assist' })}>AST</button>
-              <button {...send({ kind: 'skip' })}>Cancel</button>
-            </div>
-          </>
+      hint =
+        team && !can.value.team(team) ? (
+          <>{who(e.player)} · {gi.teams[team]}'s device records their actions. Here: block, steal or assist.</>
+        ) : gi.shotLocations ? (
+          <>{who(e.player)} · tap where the shot was taken</>
+        ) : (
+          <>{who(e.player)}</>
         );
-        break;
-      }
-      body = (
-        <>
-          <p class="hint">{who(e.player)}</p>
-          <div class="grid4">
-            <button class="make" {...send({ kind: 'shot', value: 2, made: true })}>2 ✓</button>
-            <button class="miss" {...send({ kind: 'shot', value: 2, made: false })}>2 ✗</button>
-            <button class="make" {...send({ kind: 'shot', value: 3, made: true })}>3 ✓</button>
-            <button class="miss" {...send({ kind: 'shot', value: 3, made: false })}>3 ✗</button>
-          </div>
-          {gi.shotLocations && <Court />}
-          <div class="grid4">
-            <button {...send({ kind: 'rebound' })}>REB</button>
-            <button {...send({ kind: 'assist' })}>AST</button>
-            <button {...send({ kind: 'steal' })}>STL</button>
-            <button {...send({ kind: 'block' })}>BLK</button>
-            <button {...send({ kind: 'turnover' })}>TO</button>
-            <button {...send({ kind: 'foul' })}>FOUL</button>
-            <button {...send({ kind: 'sub' })}>SUB</button>
-            <button {...send({ kind: 'skip' })}>Cancel</button>
-          </div>
-        </>
-      );
       break;
     }
     case 'shotResult':
-      body = (
-        <>
-          <p class="hint">
-            {who(e.player)} · {e.value}PT <button class="link" {...send({ kind: 'flipValue' })}>switch to {e.value === 2 ? 3 : 2}</button>
-          </p>
-          <div class="grid2">
-            <button class="make" {...send({ kind: 'result', made: true })}>Made</button>
-            <button class="miss" {...send({ kind: 'result', made: false })}>Missed</button>
-          </div>
-        </>
-      );
+      hint = <>{who(e.player)} · {ZONES.find((z) => z.id === shotZone(e.x, e.y))!.label}</>;
       break;
     case 'assist':
-      body = <Prompt text="Assist? Tap the passer." />;
+      overlay = <Prompt text="Assist? Tap the passer." />;
       break;
     case 'rebound':
-      body = <Prompt text="Rebound? Tap the player or Team REB." />;
+      overlay = <Prompt text="Rebound? Tap the player or Team REB." />;
       break;
     case 'steal':
-      body = <Prompt text="Steal? Tap the defender." />;
+      overlay = <Prompt text="Steal? Tap the defender." />;
+      break;
+    case 'fouled':
+      overlay = <Prompt text="Who was fouled? Tap the player." />;
       break;
     case 'turnoverKind':
-      body = (
-        <>
-          <p class="hint">Turnover type</p>
-          <div class="grid3">
-            {TURNOVERS.map(([k, label]) => (
-              <button key={k} {...send({ kind: 'turnoverKind', value: k })}>{label}</button>
-            ))}
-            <button {...send({ kind: 'skip' })}>Other</button>
-          </div>
-        </>
+      overlay = (
+        <Picker title="Turnover type">
+          {TURNOVERS.map(([k, label]) => (
+            <button key={k} {...send({ kind: 'turnoverKind', value: k })}>{label}</button>
+          ))}
+          <button {...send({ kind: 'skip' })}>Other</button>
+        </Picker>
       );
       break;
     case 'foulKind':
-      body = (
-        <>
-          <p class="hint">{who(e.player)} · foul type</p>
-          <div class="grid3">
-            {FOUL_KINDS.map((k) => (
-              <button key={k} {...send({ kind: 'foulKind', value: k })}>{k}</button>
-            ))}
-          </div>
-        </>
+      overlay = (
+        <Picker title={`${who(e.player)} · foul type`}>
+          {FOUL_KINDS.map((k) => (
+            <button key={k} {...send({ kind: 'foulKind', value: k })}>{k}</button>
+          ))}
+        </Picker>
       );
       break;
-    case 'fouled':
-      body = <Prompt text="Who was fouled? Tap the player." />;
-      break;
     case 'ftCount':
-      body = (
-        <>
-          <p class="hint">Free throws awarded</p>
-          <div class="grid3">
-            {([1, 2, 3] as const).map((n) => (
-              <button key={n} {...send({ kind: 'ftCount', n })}>{n}</button>
-            ))}
-          </div>
-        </>
+      overlay = (
+        <Picker title="Free throws awarded" cols={3}>
+          {([1, 2, 3] as const).map((n) => (
+            <button key={n} class="big-num" {...send({ kind: 'ftCount', n })}>{n}</button>
+          ))}
+        </Picker>
       );
       break;
     case 'sub':
-      body = (
-        <>
-          <p class="hint">Substitution {gi.teams[e.team]}: tap players going out and coming in</p>
-          <p>Out: {e.out.map(who).join(', ') || '-'}</p>
-          <p>In: {e.in.map(who).join(', ') || '-'}</p>
-          <div class="grid2">
+      overlay = (
+        <div class="card sub-card">
+          <p class="card-title">Substitution · {gi.teams[e.team]}</p>
+          <p class="small">Tap players going out and coming in, in the {gi.teams[e.team]} rail.</p>
+          <div class="sub-lists">
+            <div><span class="eyebrow">Out</span>{e.out.map((id) => <p key={id}>{who(id)}</p>)}</div>
+            <div><span class="eyebrow">In</span>{e.in.map((id) => <p key={id}>{who(id)}</p>)}</div>
+          </div>
+          <div class="row">
             <button class="primary" {...send({ kind: 'confirm' })}>Confirm</button>
             <button {...send({ kind: 'skip' })}>Cancel</button>
           </div>
-        </>
+        </div>
       );
       break;
   }
+
+  const selected = e.step === 'player' ? e.player : null;
+  const ownsSelected = !!selected && can.value.team(state.value.roster[selected]!);
   return (
-    <section class="pad">
-      {typed.value && <p class="typed">#{typed.value}</p>}
+    <>
       <FreeThrows />
-      {body}
-    </section>
+      {gi.shotLocations ? (
+        <ShotCourt dim={!!overlay} active={ownsSelected || e.step === 'shotResult'} />
+      ) : (
+        <div class={`shot-grid${ownsSelected ? '' : ' idle'}`}>
+          <ShotButtons disabled={!ownsSelected} />
+        </div>
+      )}
+      {hint && <p class="stage-hint">{hint}</p>}
+      {gi.shotLocations && ownsSelected && (
+        <div class="no-spot">
+          <span class="small">No spot:</span>
+          <ShotButtons disabled={false} />
+        </div>
+      )}
+      {typed.value && <p class="typed">#{typed.value}</p>}
+      {overlay && <div class="overlay">{overlay}</div>}
+    </>
+  );
+}
+
+function ShotButtons({ disabled }: { disabled: boolean }) {
+  return (
+    <>
+      <button class="make" disabled={disabled} {...send({ kind: 'shot', value: 2, made: true })}>2 ✓</button>
+      <button class="miss" disabled={disabled} {...send({ kind: 'shot', value: 2, made: false })}>2 ✗</button>
+      <button class="make" disabled={disabled} {...send({ kind: 'shot', value: 3, made: true })}>3 ✓</button>
+      <button class="miss" disabled={disabled} {...send({ kind: 'shot', value: 3, made: false })}>3 ✗</button>
+    </>
+  );
+}
+
+/** The court with its 12 sections. Tap -> the section lights up and the Made/Missed card appears there. */
+function ShotCourt({ dim, active }: { dim: boolean; active: boolean }) {
+  const e = entry.value;
+  const spot = e.step === 'shotResult' ? e : null;
+  const at = spot ? toScreen(spot.x, spot.y) : null;
+  const team = spot ? state.value.roster[spot.player] : undefined;
+  return (
+    <div class={`court-wrap${dim ? ' dim' : ''}${active ? ' active' : ''}`}>
+      <Court
+        testId="court"
+        id="scorer-court"
+        highlight={spot ? shotZone(spot.x, spot.y) : null}
+        onTap={(x, y) => {
+          const t = performance.now();
+          input({ kind: 'court', x, y });
+          measureTap(t);
+        }}
+      >
+        {at && <circle class={`court-spot team-${team}`} cx={at.sx} cy={at.sy} r="3.2" />}
+      </Court>
+      {spot && at && (
+        <div class="result-card" style={{ left: `clamp(98px, ${(at.sx / 150) * 100}%, calc(100% - 98px))`, top: `clamp(48px, ${(at.sy / 140) * 100}%, calc(100% - 48px))` }}>
+          <button class="make" {...send({ kind: 'result', made: true })}>
+            <b>{spot.value}</b> Made
+          </button>
+          <button class="miss" {...send({ kind: 'result', made: false })}>
+            <b>{spot.value}</b> Missed
+          </button>
+          <button class="link" {...send({ kind: 'flipValue' })}>switch to {spot.value === 2 ? 3 : 2}</button>
+        </div>
+      )}
+    </div>
   );
 }
 
 function Prompt({ text }: { text: string }) {
   return (
-    <div class="prompt">
-      <p>{text}</p>
+    <div class="card prompt">
+      <p class="card-title">{text}</p>
       <button {...send({ kind: 'skip' })}>Skip</button>
+    </div>
+  );
+}
+
+function Picker({ title, children, cols = 3 }: { title: string; children: ComponentChildren; cols?: number }) {
+  return (
+    <div class="card picker">
+      <p class="card-title">{title}</p>
+      <div class="picker-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {children}
+      </div>
     </div>
   );
 }
@@ -423,9 +450,9 @@ function FreeThrows() {
   if (!due) return null;
   const p = due.shooter ? playersById.value.get(due.shooter) : undefined;
   return (
-    <div class="ft">
+    <div class={`ft-bar team-${due.team}`}>
       <span>
-        FT {due.next}/{due.of} · {p ? `#${p.jersey} ${p.name}` : `pick a ${info.value!.teams[due.team]} shooter`}
+        <b>FT {due.next}/{due.of}</b> · {p ? `#${p.jersey} ${p.name}` : `pick a ${info.value!.teams[due.team]} shooter`}
       </span>
       {can.value.team(due.team) ? (
         <>
@@ -439,22 +466,75 @@ function FreeThrows() {
   );
 }
 
-/** Half court, baseline at the bottom. Tap = shot location. */
-function Court() {
-  const onDown = (e: PointerEvent) => {
-    const t = performance.now();
-    e.preventDefault();
-    const r = (e.currentTarget as SVGElement).getBoundingClientRect();
-    input({ kind: 'court', x: (e.clientX - r.left) / r.width, y: 1 - (e.clientY - r.top) / r.height });
-    measureTap(t);
-  };
+/** Bottom dock: player actions (for the selected player), undo, and the menu. */
+function Dock({ menu }: { menu: () => void }) {
+  const e = entry.value;
+  const selected = e.step === 'player' ? e.player : null;
+  const team = selected ? state.value.roster[selected] : undefined;
+  const owns = !!team && can.value.team(team);
+  const live = state.value.phase === 'live';
+  const act = (label: string, i: Input, enabled: boolean) => (
+    <button disabled={!live || !enabled} {...send(i)}>
+      {label}
+    </button>
+  );
   return (
-    <svg class="court" viewBox="0 0 150 140" onPointerDown={onDown} data-testid="court">
-      <rect x="0" y="0" width="150" height="140" class="floor" />
-      <path d="M9 140 V110.1 A67.5 67.5 0 0 1 141 110.1 V140" class="line" />
-      <rect x="50" y="82" width="50" height="58" class="line" />
-      <circle cx="75" cy="124.25" r="2.25" class="line" />
-    </svg>
+    <nav class="dock">
+      <div class="dock-actions">
+        {act('REB', { kind: 'rebound' }, owns)}
+        {act('AST', { kind: 'assist' }, !!selected)}
+        {act('STL', { kind: 'steal' }, !!selected)}
+        {act('BLK', { kind: 'block' }, !!selected)}
+        {act('TO', { kind: 'turnover' }, owns)}
+        {act('FOUL', { kind: 'foul' }, owns)}
+        {act('SUB', { kind: 'sub' }, owns)}
+        {selected && <button class="ghost" {...send({ kind: 'skip' })}>Cancel</button>}
+      </div>
+      <button class="undo" {...tap(undo)} data-testid="undo">
+        Undo
+      </button>
+      <button class="more" onClick={menu} aria-label="More">☰</button>
+    </nav>
+  );
+}
+
+function Menu({ close, open }: { close: () => void; open: (p: 'log' | 'roles') => void }) {
+  const gi = info.value!;
+  const st = state.value;
+  const control = can.value.control && st.phase === 'live';
+  const jump = (wonBy: Team) => {
+    record({ type: 'jumpBall', payload: { wonBy } });
+    record({ type: 'possessionArrow', payload: { team: other(wonBy) } });
+  };
+  const item = (label: string, fn: () => void, testId?: string) => (
+    <button data-testid={testId} onClick={() => (close(), fn())}>
+      {label}
+    </button>
+  );
+  return (
+    <div class="menu-scrim" onClick={close}>
+      <div class="menu" onClick={(e) => e.stopPropagation()}>
+        {item('Play-by-play', () => open('log'))}
+        {gi.mode === 'multi' && item('Roles', () => open('roles'))}
+        {control && item('End period', endPeriod)}
+        {control && item(`Arrow → ${st.arrow === 'A' ? gi.teams.B : gi.teams.A}`, () => record({ type: 'possessionArrow', payload: { team: st.arrow === 'A' ? 'B' : 'A' } }), 'arrow')}
+        {control && item(`Jump won ${gi.teams.A}`, () => jump('A'))}
+        {control && item(`Jump won ${gi.teams.B}`, () => jump('B'))}
+        {item('Keyboard shortcuts', () => (showHelp.value = true))}
+      </div>
+    </div>
+  );
+}
+
+function Drawer({ title, close, children }: { title: string; close: () => void; children: ComponentChildren }) {
+  return (
+    <aside class="drawer">
+      <header>
+        <h2>{title}</h2>
+        <button onClick={close}>Close</button>
+      </header>
+      {children}
+    </aside>
   );
 }
 
@@ -464,51 +544,52 @@ function Break() {
   const checked = !!lastEnd && events.value.some((e) => e.type === 'checkpoint' && e.period === lastEnd.period);
   const a = useSignal(String(st.score.A));
   const b = useSignal(String(st.score.B));
+  const gi = info.value!;
   if (st.phase === 'final') {
     return (
-      <section class="break">
-        <h2>Final</h2>
+      <div class="card break">
+        <p class="eyebrow">Final</p>
         <p class="final">
-          {info.value!.teams.A} {st.score.A} – {st.score.B} {info.value!.teams.B}
+          {gi.teams.A} {st.score.A} – {st.score.B} {gi.teams.B}
         </p>
-      </section>
+      </div>
     );
   }
   const regulationOver = !!st.rules && st.period >= st.rules.periods;
   if (!can.value.control) {
     return (
-      <section class="break">
+      <div class="card break">
         <h2>End of period {st.period}</h2>
         <p>Waiting for the game-control device to start the next period.</p>
-      </section>
+      </div>
     );
   }
   return (
-    <section class="break">
+    <div class="card break">
       <h2>End of period {st.period}</h2>
       {!checked ? (
         <>
           <p>Check the score against the official scoreboard.</p>
-          <label>
-            {info.value!.teams.A} <input value={a.value} onInput={(e) => (a.value = e.currentTarget.value)} inputMode="numeric" size={3} />
-          </label>
-          <label>
-            {info.value!.teams.B} <input value={b.value} onInput={(e) => (b.value = e.currentTarget.value)} inputMode="numeric" size={3} />
-          </label>
+          <div class="score-check">
+            <label for="check-a">{gi.teams.A}</label>
+            <input id="check-a" value={a.value} onInput={(e) => (a.value = e.currentTarget.value)} inputMode="numeric" size={3} />
+            <label for="check-b">{gi.teams.B}</label>
+            <input id="check-b" value={b.value} onInput={(e) => (b.value = e.currentTarget.value)} inputMode="numeric" size={3} />
+          </div>
+          {(Number(a.value) !== st.score.A || Number(b.value) !== st.score.B) && <p class="error">Doesn't match the log ({st.score.A}–{st.score.B}). It will be flagged for review.</p>}
           <button class="primary" onClick={() => checkpoint({ A: Number(a.value), B: Number(b.value) })}>
             Confirm score
           </button>
-          {(Number(a.value) !== st.score.A || Number(b.value) !== st.score.B) && <p class="error">Doesn't match the log ({st.score.A}–{st.score.B}). It will be flagged for review.</p>}
         </>
       ) : (
-        <div class="grid2">
+        <div class="row">
           <button class="primary" onClick={nextPeriod}>
             Start {regulationOver ? 'overtime' : `period ${st.period + 1}`}
           </button>
           {regulationOver && st.score.A !== st.score.B && <button onClick={endGame}>End game</button>}
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
@@ -536,9 +617,9 @@ function PlayByPlay() {
     </span>
   );
   return (
-    <aside class="pbp" data-testid="pbp">
+    <div class="pbp" data-testid="pbp">
       {rejected.value.length > 0 && (
-        <details open>
+        <details open class="refused">
           <summary>{rejected.value.length} refused by the server (not counted)</summary>
           {rejected.value.map((r) => (
             <p key={r.event.id} class="error">
@@ -557,7 +638,7 @@ function PlayByPlay() {
         </div>
       ))}
       <p class="small">Tap-to-render median: {median(tapToRender.value)} ms</p>
-    </aside>
+    </div>
   );
 }
 
@@ -569,7 +650,6 @@ const describe = (e: GameEvent, players: Map<string, Player>) =>
   });
 
 const median = (xs: number[]) => (xs.length ? Math.round([...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!) : '-');
-
 
 const KEYS: [string, string][] = [
   ['0-9 then Enter', 'pick player by jersey (Tab: other team)'],
@@ -588,8 +668,11 @@ const KEYS: [string, string][] = [
 
 function Help() {
   return (
-    <aside class="help" onClick={() => (showHelp.value = false)}>
-      <h2>Keyboard</h2>
+    <aside class="drawer help" onClick={() => (showHelp.value = false)}>
+      <header>
+        <h2>Keyboard</h2>
+        <span class="small">Press ? to close</span>
+      </header>
       <dl>
         {KEYS.map(([k, v]) => (
           <div key={k}>
@@ -598,29 +681,7 @@ function Help() {
           </div>
         ))}
       </dl>
-      <p class="small">Press ? to close</p>
     </aside>
-  );
-}
-
-/** Timeouts, possession arrow and jump ball: the game-control device only. */
-function ControlBar() {
-  const gi = info.value!;
-  const arrow = state.value.arrow;
-  const jump = (wonBy: Team) => {
-    record({ type: 'jumpBall', payload: { wonBy } });
-    record({ type: 'possessionArrow', payload: { team: wonBy === 'A' ? 'B' : 'A' } });
-  };
-  return (
-    <div class="control-bar">
-      <button {...send({ kind: 'timeout', team: 'A' })}>Timeout {gi.teams.A}</button>
-      <button {...send({ kind: 'timeout', team: 'B' })}>Timeout {gi.teams.B}</button>
-      <button {...tap(() => record({ type: 'possessionArrow', payload: { team: arrow === 'A' ? 'B' : 'A' } }))} data-testid="arrow">
-        Arrow: {arrow ? gi.teams[arrow] : '-'}
-      </button>
-      <button {...tap(() => jump('A'))}>Jump won {gi.teams.A}</button>
-      <button {...tap(() => jump('B'))}>Jump won {gi.teams.B}</button>
-    </div>
   );
 }
 
@@ -636,10 +697,10 @@ function Roles() {
         const holder = st.roles[r];
         const mine = holder === myDevice.value;
         return (
-          <div key={r} class="role" data-testid={`role-${r}`}>
+          <div key={r} class={`role${mine ? ' mine' : ''}`} data-testid={`role-${r}`}>
             <b>{roleName(r)}</b>
             <span>{mine ? 'you' : holder ? 'another device' : 'free'}</span>
-            {!holder && <button onClick={() => claim(r)}>Claim</button>}
+            {!holder && <button class="primary" onClick={() => claim(r)}>Claim</button>}
             {holder && !mine && (
               <button disabled={!stopped} title={stopped ? '' : 'Stop the clock first'} onClick={() => takeOver(r)}>
                 Take over
@@ -656,7 +717,8 @@ function Roles() {
 
 function RolePicker() {
   return (
-    <div class="pregame">
+    <div class="sheet">
+      <p class="eyebrow">Several devices</p>
       <h1>Pick your role</h1>
       <p>Each role is scored on one device. Clock is optional: without it, {roleName('teamA')} runs the clock.</p>
       {notice.value && <p class="error">{notice.value}</p>}

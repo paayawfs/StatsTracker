@@ -11,9 +11,12 @@
     "e2e": "playwright test"
   },
   "dependencies": {
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource/barlow-condensed": "^5.3.0",
     "@preact/signals": "^2.11.2",
     "@stats/core": "workspace:*",
     "@stats/sync": "workspace:*",
+    "@stats/ui": "workspace:*",
     "@supabase/supabase-js": "^2.117.2",
     "preact": "^10.29.8",
     "valibot": "^1.5.0"

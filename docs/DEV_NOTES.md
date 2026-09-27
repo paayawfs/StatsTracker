@@ -1007,3 +1007,37 @@ players as jersey chips in two side rails, one bottom dock for everything else.
 - `shotChart` now returns `zones` (12 per team) and `groups` (5 per team).
 - Tests: 14 location cases + consistency of every section with `shotValue`; shot chart tests
   rewritten. Core: 196.
+
+### Step 2: shared court (`packages/ui`) and the court-first scorer
+
+- `packages/ui` (Preact, peer dep): `Court` draws the FIBA half court (150 x 140 SVG units,
+  baseline at the bottom) with the 12 sections as SVG masks built from the real lines (arc, key,
+  restricted arc, angle wedges), dashed section dividers, `highlight` (tapped section), `fills`
+  (heat map), `labels` (e.g. "3/7") and `onTap` (normalised court coordinates). A test puts each
+  section's label point through core's `shotZone`, so drawing and logic can't disagree. Used by
+  the scorer and the viewer.
+- Fonts bundled with the app (offline): Figtree (text) and Barlow Condensed 700/800 (numbers),
+  via @fontsource, latin only.
+- Scorer screen rebuilt in direction C:
+  - Two **rails** (team name, big score, round jersey chips with last name and foul dots, fouls /
+    timeouts / BONUS, team actions: Timeout (control device, labelled "Timeout <team>"),
+    Team TO, Coach T, Bench T, Team REB during the rebound prompt). During a sub the rail shows
+    the whole roster in 3 columns.
+  - **Centre**: period + clock + online/sync top bar; the **court is the stage**. Select a player,
+    tap the court: the section lights up, a hint names it ("Left wing 3"), and the Made/Missed
+    card (value preset from the section, "switch to 2/3") pops up at the spot, clamped inside the
+    court. "No spot" 2/3 buttons stay available. Games without shot locations get a big 2x2 shot
+    grid instead of the court. Prompts, pickers and the sub panel appear as cards over a dimmed
+    court; the FT bar floats at the top.
+  - **Dock**: REB AST STL BLK TO FOUL SUB (enabled per selection and ownership), Cancel, Undo,
+    and a ☰ menu (Play-by-play, Roles, End period, possession arrow, jump ball, keyboard help).
+    Play-by-play, roles and help open as side drawers.
+  - Court sizing uses container-query units so it always fits both the stage width and height.
+  - Portrait phone: rails side by side on top, court below, dock on two rows.
+  - Notices sit above the dock (never over the clock) and clear after 6 s.
+- Bugs caught while restyling, all fixed: the court overflowed into the rails (sized from height
+  only); the result card could leave the screen near a sideline; menu items opened a drawer and
+  closed it in the same click (e2e); a take-over notice covered the clock (e2e).
+- e2e updates: a `menu(page, item)` helper for items now in ☰; opponent selection shows the shot
+  buttons disabled rather than hidden; the result card reads "3 Made". All 16 scorer e2e and 2
+  viewer e2e pass; screenshots checked at 740x360, 844x390, 1180x820 and 390x844.

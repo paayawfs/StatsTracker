@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { btn, createGame, device, joinAndStart, pickStartersAndStart, player } from './fixtures';
+import { btn, createGame, device, joinAndStart, pickStartersAndStart, player, menu } from './fixtures';
 
 // Scorers hold phones in landscape. Every in-play screen must fit without scrolling.
 const PHONES = [
@@ -54,7 +54,7 @@ for (const phone of PHONES) {
     await btn(page, 'Confirm').click();
 
     await expect(page.getByTestId('undo')).toBeInViewport();
-    await btn(page, 'Play-by-play').click();
+    await menu(page, 'Play-by-play');
     await fits(page, 'play-by-play open');
   });
 }

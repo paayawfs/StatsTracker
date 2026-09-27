@@ -20,7 +20,7 @@ test('a viewer follows a live game: score within 2 s, box score, play-by-play, s
   const box = (await court.boundingBox())!;
   await court.click({ position: { x: box.width * 0.5, y: box.height * 0.1 } });
   const t0 = Date.now();
-  await btn(scorer, 'Made').click();
+  await btn(scorer, '3 Made').click(); // the card shows the value: '3 Made'
   await expect(viewer.getByTestId('score-A')).toHaveText('3');
   const ms = Date.now() - t0;
   console.log(`tap -> viewer (local): ${ms} ms`);
