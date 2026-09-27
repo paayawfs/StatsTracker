@@ -34,6 +34,9 @@ export class SupabaseTransport implements SyncTransport {
   }
 
   broadcast(m: PeerMessage) {
+    // Not joined yet (or reconnecting): skip. The durable path delivers the event anyway, and
+    // realtime-js would otherwise fall back to one REST request per event.
+    if (this.channel?.state !== 'joined') return;
     const payload = m.kind === 'event' ? m.event : { eventId: m.eventId };
     void this.channel?.send({ type: 'broadcast', event: m.kind, payload }).catch(() => {});
   }

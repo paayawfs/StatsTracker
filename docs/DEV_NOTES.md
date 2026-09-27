@@ -552,3 +552,41 @@ conflict notifications, peer latency hook), deterministic network simulator. Cor
 - `logic/clock.ts`: running time from the reducer's last start/stop; `10:00` format, tenths in
   the last minute.
 - core: new `EventBody` type (any event's `{type, payload}` without the envelope).
+
+### Step 3: the app (join, pre-game, live scoring, play-by-play)
+
+- `session.ts`: Supabase client, join (anonymous sign-in -> `join_game` -> load game info),
+  resume, `GameSync` wiring, and the signals the UI reads (`state`, `events`, `entry`,
+  `online`, `pending`, `rejected`, `notice`, `now`, `tapToRender`). Game info (teams, roster
+  names/jerseys, rules, mode) is cached in `localStorage`, together with the Supabase session and
+  a per-device id, so a reload mid-game **while offline** goes straight back into the game.
+- `stamp()` builds envelopes: pregame events use period 0; `gameClock` is the running clock,
+  **rounded** (see bug below); `deviceSeq` and `wallClock` strictly increase, so two events from
+  one tap (offensive foul + turnover) keep their order.
+- Single mode: the device claims the `single` role on open if it doesn't hold it.
+- `app.tsx`:
+  - Join -> Pregame (pick 5+5 starters; Start = `gameStart` + `periodStart`) -> Live.
+  - Live: scoreboard (score, team fouls with BONUS, timeouts left, clock tap = start/stop, "set"
+    to match the official clock, online/offline + "N to sync"), two team panels (on-floor players
+    always visible; the whole roster during a sub), centre action pad driven by the entry
+    machine, free-throw bar while FTs are owed, Undo / End period / Play-by-play.
+  - Break: score check against the official scoreboard (`checkpoint`; a mismatch warns and is
+    flagged), then next period / overtime / end game.
+  - Play-by-play: tap a row to Remove (void) or, for shots and FTs, flip made/missed or 2/3
+    (amend). Server-refused events are listed separately with the reason.
+- Fine-grained rendering: each player button and score reads its own computed signal; team
+  panels only re-render when their lineup string changes.
+- All inputs fire on `pointerdown`; `touch-action: manipulation` on buttons and the court.
+- Layouts: tablet/laptop = teams left and right of the pad; phone (<= 720 px) = teams side by side
+  above the pad. An e2e test asserts the phone layout needs no scrolling (390x844).
+- Build: 80 KB gzip JS + 1.6 KB CSS for the whole app.
+- **Bug found by e2e (fixed):** while the clock ran, `gameClock` came out fractional (the clock
+  offset is a midpoint, so /2), which the schema rejects. The server refused the events, and the
+  app correctly pulled them back and listed them as refused. Fixes: round in `stamp`, and
+  `GameSync.record` now validates the event with `parseEvent` and throws, so a UI bug fails
+  loudly on the device instead of as a server rejection (~0.1 ms per tap).
+- `SupabaseTransport.broadcast` skips when the channel isn't joined yet (the durable path
+  delivers the event anyway); before, realtime-js fell back to one REST call per event.
+- e2e (`apps/scorer/e2e`, Playwright against the production build + local Supabase; each test
+  creates its own game): full single-mode sequence ending with every event on the server;
+  play-by-play corrections; phone no-scroll.

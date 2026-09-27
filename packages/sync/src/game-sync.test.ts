@@ -148,3 +148,15 @@ describe('untrusted input', () => {
     expect(a.sync.log.events).toHaveLength(0);
   });
 });
+
+describe('record validation', () => {
+  test('an invalid event from the UI is refused on the device, before it goes anywhere', async () => {
+    const net = new SimNetwork();
+    const { sync } = await client(net, 'A');
+    const bad = { ...tap(sync, 'clockStart', {}), gameClock: 1.5 };
+    expect(() => sync.record(bad)).toThrow(/invalid event/);
+    expect(sync.log.events).toHaveLength(0);
+    await net.settle();
+    expect(net.server).toHaveLength(0);
+  });
+});

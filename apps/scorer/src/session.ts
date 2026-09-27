@@ -1,0 +1,239 @@
+import { computed, signal } from '@preact/signals';
+import { initialState, periodLength, type EventBody, type EventOf, type GameEvent, type GameState, type RuleSet, type Team } from '@stats/core';
+import { GameSync, LocalStore, SupabaseTransport, supabaseClientOptions } from '@stats/sync';
+import { createClient } from '@supabase/supabase-js';
+import { remaining } from './logic/clock';
+import { idle, step, type Entry, type Input } from './logic/entry';
+import { undoLast } from './logic/undo';
+
+const LOCAL_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
+export const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL ?? 'http://127.0.0.1:54321',
+  import.meta.env.VITE_SUPABASE_ANON_KEY ?? LOCAL_ANON,
+  supabaseClientOptions,
+);
+
+export interface Player {
+  id: string;
+  name: string;
+  jersey: string;
+  team: Team;
+}
+/** Everything needed to score a game, cached so the app can resume offline. */
+export interface GameInfo {
+  gameId: string;
+  teams: Record<Team, string>;
+  players: Player[];
+  rules: RuleSet;
+  shotLocations: boolean;
+  mode: 'single' | 'multi';
+}
+
+const INFO_KEY = 'scorer.game';
+const DEVICE_KEY = 'scorer.device';
+
+function deviceId(): string {
+  let id = localStorage.getItem(DEVICE_KEY);
+  if (!id) localStorage.setItem(DEVICE_KEY, (id = crypto.randomUUID()));
+  return id;
+}
+
+// ---- reactive state -------------------------------------------------------------------------
+export const info = signal<GameInfo | null>(null);
+export const state = signal<GameState>(initialState);
+export const events = signal<readonly GameEvent[]>([]);
+export const entry = signal<Entry>(idle);
+export const online = signal(false);
+export const pending = signal(0);
+export const rejected = signal<{ event: GameEvent; reason: string }[]>([]);
+export const notice = signal<string | null>(null);
+/** Ticks ~10x/s while the clock runs so the display counts down. */
+export const now = signal(Date.now());
+/** Tap-to-render samples (ms) for this session. Uploaded in Phase 7. */
+export const tapToRender = signal<number[]>([]);
+
+export const playersById = computed(() => new Map((info.value?.players ?? []).map((p) => [p.id, p])));
+
+let sync: GameSync | null = null;
+let lastStamp = { deviceSeq: 0, wallClock: 0 };
+const undone = new Set<string>();
+
+// ---- joining and resuming -------------------------------------------------------------------
+export async function join(code: string): Promise<void> {
+  const { data: session } = await supabase.auth.getSession();
+  if (!session.session) {
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error) throw error;
+  }
+  const joined = await supabase.rpc('join_game', { join_code: code.trim(), device: deviceId() });
+  if (joined.error) throw new Error(joined.error.message);
+  const gameInfo = await loadInfo(joined.data as string);
+  localStorage.setItem(INFO_KEY, JSON.stringify(gameInfo));
+  await open(gameInfo);
+}
+
+async function loadInfo(gameId: string): Promise<GameInfo> {
+  const g = await supabase.from('games').select('id, mode, shot_locations, team_a, team_b, rule_sets(rules)').eq('id', gameId).single();
+  if (g.error) throw new Error(g.error.message);
+  const teams = await supabase.from('teams').select('id, name').in('id', [g.data.team_a, g.data.team_b]);
+  const roster = await supabase.from('game_roster').select('player_id, team, jersey, players(name)').eq('game_id', gameId);
+  if (teams.error || roster.error) throw new Error((teams.error ?? roster.error)!.message);
+  const name = (id: string) => teams.data.find((t) => t.id === id)?.name ?? '';
+  return {
+    gameId,
+    mode: g.data.mode,
+    shotLocations: g.data.shot_locations,
+    rules: (g.data.rule_sets as unknown as { rules: RuleSet }).rules,
+    teams: { A: name(g.data.team_a), B: name(g.data.team_b) },
+    players: roster.data
+      .map((r) => ({ id: r.player_id, team: r.team as Team, jersey: r.jersey, name: (r.players as unknown as { name: string }).name }))
+      .sort((a, b) => a.team.localeCompare(b.team) || Number(a.jersey) - Number(b.jersey)),
+  };
+}
+
+/** Resume the last game on this device, offline if need be. */
+export async function resume(): Promise<boolean> {
+  const cached = localStorage.getItem(INFO_KEY);
+  if (!cached) return false;
+  await open(JSON.parse(cached) as GameInfo);
+  return true;
+}
+
+export function leave() {
+  sync?.close();
+  sync = null;
+  localStorage.removeItem(INFO_KEY);
+  info.value = null;
+  state.value = initialState;
+  events.value = [];
+}
+
+async function open(gameInfo: GameInfo) {
+  const store = await LocalStore.open();
+  sync = await GameSync.open({ gameId: gameInfo.gameId, deviceId: deviceId(), transport: new SupabaseTransport(supabase, gameInfo.gameId), store });
+  const s = sync;
+  const refresh = () => {
+    state.value = s.log.state;
+    events.value = s.log.events;
+    online.value = s.online;
+    pending.value = s.log.events.filter((e) => e.seq === null && e.deviceId === s.deviceId).length;
+    rejected.value = s.rejected.map((r) => ({ event: r.event, reason: r.rejected ?? '' }));
+  };
+  s.onChange = refresh;
+  s.onRejected = (_, reason) => (notice.value = `The server refused an event: ${reason}`);
+  s.onConflict = () => (notice.value = 'Another scorer changed an event you corrected. The latest change wins.');
+  setInterval(() => {
+    online.value = s.online;
+    if (state.value.clock.running) now.value = s.now();
+  }, 100);
+  info.value = gameInfo;
+  refresh();
+  void navigator.storage?.persist?.();
+  claimRole();
+}
+
+function claimRole() {
+  const s = sync!;
+  const role = info.value!.mode === 'single' ? 'single' : null;
+  if (!role || Object.values(state.value.roles).includes(s.deviceId)) return;
+  record({ type: 'roleClaim', payload: { role } }, { period: 0, gameClock: 0 });
+}
+
+// ---- recording --------------------------------------------------------------------------------
+export const clockNow = () => (sync ? remaining(state.value.clock, sync.now()) : 0);
+
+function stamp(body: EventBody, env: Partial<Pick<GameEvent, 'period' | 'gameClock'>> = {}): GameEvent {
+  const s = sync!;
+  const st = state.value;
+  // Strictly increasing within a device, so two events from one tap keep their order.
+  lastStamp = {
+    deviceSeq: Math.max(s.nextDeviceSeq(), lastStamp.deviceSeq + 1),
+    wallClock: Math.max(Math.round(s.now()), lastStamp.wallClock + 1),
+  };
+  return {
+    id: crypto.randomUUID(),
+    gameId: s.gameId,
+    seq: null,
+    deviceId: s.deviceId,
+    role: 'single',
+    period: st.phase === 'pregame' ? 0 : st.period,
+    gameClock: st.phase === 'pregame' ? 0 : Math.round(clockNow()),
+    ...lastStamp,
+    ...env,
+    ...body,
+  } as GameEvent;
+}
+
+export function record(body: EventBody, env?: Partial<Pick<GameEvent, 'period' | 'gameClock'>>) {
+  sync?.record(stamp(body, env));
+}
+
+/** Feed a tap into the entry machine and record whatever it emits. */
+export function input(i: Input) {
+  if (!sync) return;
+  const r = step(entry.value, i, { state: state.value, events: sync.log.events, stamp: (b) => stamp(b) });
+  entry.value = r.entry;
+  for (const e of r.events) sync.record(e);
+}
+
+export function undo() {
+  if (!sync) return;
+  const u = undoLast(sync.log, sync.deviceId, undone);
+  if (!u) return;
+  const marker = stamp(u.body);
+  undone.add(u.undoes).add(marker.id);
+  sync.record(marker);
+  entry.value = idle;
+}
+
+export function correct(body: EventOf<'amend'>['payload'] | EventOf<'void'>['payload'], kind: 'amend' | 'void') {
+  record({ type: kind, payload: body } as EventBody);
+}
+
+// ---- game control ---------------------------------------------------------------------------
+export function startGame(lineups: Record<Team, string[]>) {
+  const gi = info.value!;
+  const roster = (t: Team) => gi.players.filter((p) => p.team === t).map((p) => ({ playerId: p.id, jersey: p.jersey }));
+  if (!state.value.rules) record({ type: 'gameStart', payload: { rules: gi.rules, shotLocations: gi.shotLocations, roster: { A: roster('A'), B: roster('B') } } }, { period: 0, gameClock: 0 });
+  record({ type: 'periodStart', payload: { lineups } }, { period: 1, gameClock: periodLength(gi.rules, 1) });
+}
+
+export function toggleClock() {
+  const st = state.value;
+  if (st.phase !== 'live') return;
+  record({ type: st.clock.running ? 'clockStop' : 'clockStart', payload: {} });
+}
+
+/** Set the clock to match the official scoreboard (recorded as a stop at that time). */
+export function setClock(ms: number) {
+  record({ type: 'clockStop', payload: {} }, { gameClock: ms });
+}
+
+export function endPeriod() {
+  if (state.value.clock.running) record({ type: 'clockStop', payload: {} });
+  record({ type: 'periodEnd', payload: {} }, { gameClock: 0 });
+  entry.value = idle;
+}
+
+export function checkpoint(score: Record<Team, number>) {
+  record({ type: 'checkpoint', payload: { score } }, { gameClock: 0 });
+}
+
+export function nextPeriod() {
+  const st = state.value;
+  const period = st.period + 1;
+  record({ type: 'periodStart', payload: { lineups: { A: [...st.onFloor.A], B: [...st.onFloor.B] } } }, { period, gameClock: periodLength(st.rules!, period) });
+}
+
+export function endGame() {
+  record({ type: 'gameEnd', payload: {} }, { gameClock: 0 });
+}
+
+/** Record a tap-to-render sample: call at pointerdown, measures to the next painted frame. */
+export function measureTap(start: number) {
+  requestAnimationFrame(() =>
+    setTimeout(() => {
+      tapToRender.value = [...tapToRender.value.slice(-199), performance.now() - start];
+    }),
+  );
+}

@@ -1,0 +1,84 @@
+import { expect, test } from '@playwright/test';
+import { btn, createGame, joinAndStart, player, serverEvents } from './fixtures';
+
+test('a full single-mode sequence: shots, assist, rebound, foul + free throws, sub, undo, period end', async ({ page }) => {
+  const g = await createGame();
+  await joinAndStart(page, g.code);
+  const scoreA = page.getByTestId('score-A');
+  const scoreB = page.getByTestId('score-B');
+
+  await page.getByTestId('clock').click(); // start the clock
+
+  // Made 2 with an assist (two taps + one prompt tap).
+  await player(page, 'A', 4).click();
+  await btn(page, '2 ✓').click();
+  await expect(page.getByText('Assist? Tap the passer.')).toBeVisible();
+  await player(page, 'A', 5).click();
+  await expect(scoreA).toHaveText('2');
+
+  // Missed 3, defensive rebound from the prompt.
+  await player(page, 'B', 4).click();
+  await btn(page, '3 ✗').click();
+  await player(page, 'A', 7).click();
+
+  // Shooting foul, two free throws for the fouled player, both made.
+  await player(page, 'B', 5).click();
+  await btn(page, 'FOUL').click();
+  await btn(page, 'shooting').click();
+  await player(page, 'A', 4).click();
+  await btn(page, '2').click();
+  await page.getByTestId('ft-made').click();
+  await page.getByTestId('ft-made').click();
+  await expect(scoreA).toHaveText('4');
+
+  // Made 3 for B, skip the assist.
+  await player(page, 'B', 6).click();
+  await btn(page, '3 ✓').click();
+  await btn(page, 'Skip').click();
+  await expect(scoreB).toHaveText('3');
+
+  // Substitution: A #8 out, #9 in.
+  await player(page, 'A', 8).click();
+  await btn(page, 'SUB').click();
+  await player(page, 'A', 9).click();
+  await btn(page, 'Confirm').click();
+  await expect(player(page, 'A', 9)).toBeVisible();
+  await expect(player(page, 'A', 8)).toHaveCount(0);
+
+  // Undo the substitution.
+  await page.getByTestId('undo').click();
+  await expect(player(page, 'A', 8)).toBeVisible();
+  await expect(player(page, 'A', 9)).toHaveCount(0);
+
+  // End the period and reconcile against the scoreboard.
+  await btn(page, 'End period').click();
+  await expect(page.getByText('End of period 1')).toBeVisible();
+  await btn(page, 'Confirm score').click();
+  await btn(page, 'Start period 2').click();
+  await expect(page.getByTestId('clock')).toHaveText('10:00');
+
+  // Everything reached the server.
+  await expect(page.getByText('to sync')).toHaveCount(0, { timeout: 10_000 });
+  const types = (await serverEvents(g.slug)).map((e) => e.type);
+  expect(types).toEqual(
+    expect.arrayContaining(['roleClaim', 'gameStart', 'periodStart', 'shot', 'amend', 'rebound', 'foul', 'freeThrow', 'substitution', 'void', 'periodEnd', 'checkpoint']),
+  );
+});
+
+test('corrections from the play-by-play', async ({ page }) => {
+  const g = await createGame();
+  await joinAndStart(page, g.code);
+  await player(page, 'A', 4).click();
+  await btn(page, '2 ✓').click();
+  await btn(page, 'Skip').click();
+  await expect(page.getByTestId('score-A')).toHaveText('2');
+
+  await btn(page, 'Play-by-play').click();
+  await page.getByTestId('pbp').getByText('2PT made').click();
+  await btn(page, 'Make it 3PT').click();
+  await expect(page.getByTestId('score-A')).toHaveText('3');
+
+  await page.getByTestId('pbp').getByText('3PT made').click();
+  await btn(page, 'Remove').click();
+  await expect(page.getByTestId('score-A')).toHaveText('0');
+});

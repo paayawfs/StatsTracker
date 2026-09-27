@@ -100,6 +100,9 @@ export class GameSync {
 
   /** The tap path. Synchronous state update; everything else is fire-and-forget. */
   record(e: GameEvent): void {
+    // A UI bug must fail here, loudly, not as a server rejection later (~0.1 ms).
+    const valid = parseEvent(e);
+    if (!valid.success) throw new Error(`invalid event: ${valid.issues.map((i) => i.message).join('; ')}`);
     this.deviceSeq = Math.max(this.deviceSeq, e.deviceSeq);
     this.log.add(e);
     if (isCorrection(e)) this.checkConflict(e.payload.targetId);

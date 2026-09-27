@@ -1,7 +1,23 @@
+import { effect } from '@preact/signals';
 import { render } from 'preact';
-import { createClient } from '@supabase/supabase-js';
-import { supabaseClientOptions } from '@stats/sync';
+import { App } from './app';
+import './index.css';
+import { info, tapToRender } from './session';
 
-export const supabase = createClient(import.meta.env.VITE_SUPABASE_URL ?? 'http://127.0.0.1:54321', import.meta.env.VITE_SUPABASE_ANON_KEY ?? '', supabaseClientOptions);
+render(<App />, document.getElementById('app')!);
 
-render(<p>Scorer</p>, document.getElementById('app')!);
+if ('serviceWorker' in navigator && import.meta.env.PROD) void navigator.serviceWorker.register('/sw.js');
+
+// Keep the screen on while a game is open. The browser drops the lock when the tab is hidden.
+let lock: WakeLockSentinel | null = null;
+const wake = async () => {
+  if (info.value && document.visibilityState === 'visible' && !lock) {
+    lock = await navigator.wakeLock?.request('screen').catch(() => null);
+    lock?.addEventListener('release', () => (lock = null));
+  }
+};
+effect(() => void (info.value && wake()));
+document.addEventListener('visibilitychange', () => void wake());
+
+// For e2e latency assertions.
+Object.assign(window, { __scorer: { tapToRender } });
