@@ -755,3 +755,28 @@ fast-path latency 2-6 ms.
 - Offline events recorded by a device whose role was taken over meanwhile are refused on
   reconnect and shown in its refused list; re-entering them is manual (admin tooling, Phase 7).
 - No real phones yet.
+
+## Phase 6: derived stats and public app
+
+Decisions (2026-09-27): lineups and on/off show raw totals plus +/- per 40 minutes (no
+possession estimates); the box score includes FIBA efficiency (EFF).
+
+### Step 1: walk + box score (core)
+
+- `stats/walk.ts`: `walk(events)` replays an effective, canonically ordered log (e.g.
+  `GameLog.events`) and yields `{ event, before, after, elapsed }`. `elapsed` = game time since
+  the previous event in the same period, played by `before.onFloor`. Every derived stat is a fold
+  over this.
+- **Minutes come from event game clocks only**: time between two events belongs to the lineup
+  before the second one; a stopped clock adds 0. No clock start/stop modelling needed. Mid-game,
+  minutes run up to the latest event.
+- `stats/box.ts`: `boxScore(events)` -> player lines (MIN, PTS, FGM-A, 2PM-A, 3PM-A, FTM-A,
+  OREB, DREB, REB, AST, TO, STL, BLK, PF, FD, +/-, EFF) for every roster player in roster order,
+  and team lines (totals + `teamReb`, `teamTo` inside REB/TO, `benchFouls` for coach/bench
+  fouls, not in PF). Points come from the reducer's score change, so custom point values
+  work.
+- +/- credits each score to the lineup on the floor **at that event**, so a sub between free
+  throws is handled (fixture checks it).
+- Tests: a hand-verified fixture game (every number worked out by hand in the test comment) +
+  properties on random logs (team points = scoreboard = sum of player points; team REB/TO = player
+  sums + team-only).
