@@ -851,3 +851,21 @@ with FIBA columns + EFF, `lineups`, `onOff` with per-40, `shotChart` with zones,
 - No viewer batching (decision 7). Not load-tested with many viewers.
 - The public app is not yet deployed (Vercel config is in place; hosting is Phase 7 or when you
   choose).
+
+### Landscape phone layout (scorers hold phones sideways)
+
+- `@media (max-height: 500px) and (orientation: landscape)` in `apps/scorer/src/index.css`:
+  one-line scoreboard; players | pad | players; the control bar shares the bottom row with the
+  footer; play-by-play/help/roles open as overlays; during a sub the roster shows in two
+  columns; with shot locations on, the court sits beside a 2x2 block of shot buttons (bigger
+  court). Player buttons stay 44 px (touch-target minimum).
+- Manifest `orientation: landscape` (installed app). Portrait still works in a browser.
+- e2e `landscape.spec.ts` at 844x390 and 740x360: idle, player selected, turnover picker, foul
+  picker, FT bar, substitution with the whole roster, play-by-play, and a control-bar device, all
+  with no vertical or horizontal scroll and the key buttons in the viewport.
+- Test honesty note: the first version clipped `.live` (`height: 100vh; overflow: hidden`), which
+  made "no scroll" pass trivially. Removed; the test then caught a 4 px overflow on 740x360.
+- **Latency finding (open):** at 4x CPU throttle the first 1-2 taps after the game screen loads
+  take 50-154 ms (warm-up); later taps have a median of ~13 ms. The p95 < 50 ms assertion sits
+  near the edge and failed once in four runs. To address: warm-up or excluding the first taps
+  from the budget is a decision, not a test tweak.

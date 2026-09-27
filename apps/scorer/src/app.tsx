@@ -222,7 +222,7 @@ function TeamPanel({ team }: { team: Team }) {
     ? info.value!.players.filter((p) => p.team === team).map((p) => p.id)
     : lineup.value.split(',').filter(Boolean);
   return (
-    <section class={`team team-${team}`}>
+    <section class={`team team-${team}${subbing.value ? " subbing" : ""}`}>
       <div class="players">
         {ids.map((id) => (
           <PlayerButton key={id} id={id} />
