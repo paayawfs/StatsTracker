@@ -2,8 +2,17 @@
 // cache-first for hashed assets. Supabase traffic is never cached.
 const CACHE = 'scorer-v1';
 
+// Pre-cache the shell and every asset index.html references. On a first visit the page's own
+// JS/CSS load before the worker controls it, so runtime caching alone would miss them.
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(['/', '/manifest.webmanifest', '/icon.svg'])));
+  e.waitUntil(
+    (async () => {
+      const cache = await caches.open(CACHE);
+      const html = await (await fetch('/', { cache: 'no-cache' })).text();
+      const assets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)].map((m) => m[1]);
+      await cache.addAll(['/', '/manifest.webmanifest', '/icon.svg', ...assets]);
+    })(),
+  );
   self.skipWaiting();
 });
 
@@ -26,13 +35,15 @@ self.addEventListener('fetch', (e) => {
           caches.open(CACHE).then((c) => c.put('/', copy));
           return res;
         })
-        .catch(() => caches.match('/')),
+        .catch(() => caches.match('/', { ignoreVary: true })),
     );
     return;
   }
 
   e.respondWith(
-    caches.match(req).then(
+    // ignoreVary: Vite adds crossorigin (Origin header), servers answer Vary: Origin, and the
+    // pre-cached copies were fetched without Origin. Same-origin hashed files: safe to ignore.
+    caches.match(req, { ignoreVary: true }).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {

@@ -609,3 +609,49 @@ conflict notifications, peer latency hook), deterministic network simulator. Cor
   test-first.
 - e2e: a sequence entered only from the keyboard (clock, shot + assist, shared-jersey Tab, foul ->
   FTs, undo, help overlay).
+
+### Step 5: offline and latency
+
+- **Service worker bug found by e2e (fixed), two parts:**
+  1. On a first visit the page's own JS/CSS load before the worker controls the page, so
+     runtime caching never saw them and an offline reload came up blank. The install step now
+     fetches `/`, extracts `/assets/...` URLs and pre-caches them.
+  2. Vite tags assets `crossorigin`, so requests carry `Origin`; the server answers
+     `Vary: Origin`; the pre-cached copies (fetched without `Origin`) didn't match. Cache lookups
+     use `ignoreVary: true` (same-origin, content-hashed files).
+  - The first version of the offline test visited the page twice, which hid both bugs. It now
+    does a single visit, like a real scorer.
+- e2e `offline.spec.ts`: one visit -> join -> network off -> score (UI shows "offline", "2 to
+  sync") -> **reload with no network** (the worker serves the app; IndexedDB + the cached
+  session restore the game) -> network on -> the outbox drains and the server has both shots.
+- e2e `latency.spec.ts`: CPU throttled 4x via CDP, 45 taps, reads the app's own tap-to-render
+  samples (`window.__scorer`). Last run: median 12 ms, **p95 41 ms**, max 55 ms. Asserts p95 < 50.
+- Known ceiling: old hashed assets stay in the cache after deploys (the cache name is fixed). Bump
+  `CACHE` in `sw.js` to clear, or prune on activate if it matters.
+
+## Phase 4 report
+
+**Built:** `apps/scorer`, an installable PWA for single-mode scoring: join by code (anonymous
+sign-in), pre-game starters, live scoring (two-tap entry with assist/rebound/steal prompts, fouls
+with automatic bonus free throws and FT queue, multi-player subs, team actions, clock with
+start/stop and set, undo), period-end score check, play-by-play corrections, refused-event list,
+conflict notices, phone/tablet/laptop layouts, full keyboard map, offline with reload, wake lock,
+persistent-storage request, tap-to-render instrumentation. `pnpm dev:game` creates demo games.
+
+**Verified:**
+- Unit: core 137, sync 47, scorer 61 (entry machine 35, keys 12, undo, clock, court).
+- e2e (Playwright, production build, local Supabase), 6 tests: full single-mode sequence ending
+  with all events on the server; play-by-play corrections; phone fits one screen; keyboard-only
+  sequence; offline scoring + offline reload + reconnect sync; tap-to-render p95 < 50 ms at 4x
+  CPU throttle.
+- Screens checked by eye on tablet (1180x820) and phone (390x844).
+
+**Not verified / open:**
+- No real phone or real cellular network yet. The latency number is desktop Chrome with a
+  throttled CPU, not a mid-range Android.
+- Latency samples are only in memory; storing them per game and the admin dashboard are Phase 7.
+- The amend editor is minimal (made/missed, 2/3 for shots and FTs; everything else is
+  remove-and-re-enter).
+- NBA court lines aren't modelled; the scorer flips 2/3 manually.
+- If the browser loses the anonymous Supabase session (storage cleared), rejoining creates a new
+  user, and the `single` role is still held by the old one. Fix in Phase 5 with role transfer.
