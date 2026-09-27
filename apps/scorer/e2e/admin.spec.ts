@@ -102,3 +102,44 @@ test('admin: set up a league, run a game with a scorer, lock it, export, season 
   await btn(admin, 'Add admin').click();
   await expect(admin.getByText('No account uses nobody@example.com')).toBeVisible();
 });
+
+test('admin: import a roster CSV, map the columns, preview, import', async ({ browser }) => {
+  const admin = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
+  await admin.goto('/admin');
+  await admin.getByLabel('Email').fill(`csv-${Date.now()}@example.com`);
+  await admin.getByLabel('Password').fill('correct-horse-battery');
+  await btn(admin, 'Create account').click();
+  await admin.getByPlaceholder('League name').fill('CSV League');
+  await btn(admin, 'Create league').click();
+  await admin.getByRole('button', { name: 'CSV League' }).click();
+  await btn(admin, 'Teams & players').click();
+  await admin.getByPlaceholder('Team name').fill('Lions');
+  await btn(admin, 'Add team').click();
+  await admin.getByTestId('team-Lions').getByRole('textbox').fill('23 Kofi Mensah');
+  await admin.getByTestId('team-Lions').getByRole('button', { name: 'Add 1 players' }).click();
+  await expect(admin.getByTestId('team-Lions').getByText('1 players')).toBeVisible();
+
+  const csv = ['Player,No.,Club', 'Kofi Mensah,23,Lions', 'Ama Ofori,7,Tigers', '"Boateng, Yaw",4,lions', ',9,Tigers', 'Esi Quaye,7,Tigers'].join('\r\n');
+  await admin.getByText('Import players from a CSV file').click();
+  await admin.getByLabel('CSV file').setInputFiles({ name: 'roster.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
+
+  // Guessed mapping, and the preview explains every row.
+  await expect(admin.getByLabel('Full name')).toHaveValue('0');
+  await expect(admin.getByLabel('Jersey')).toHaveValue('1');
+  await expect(admin.getByLabel('Team', { exact: true })).toHaveValue('2');
+  await expect(admin.getByTestId('csv-summary')).toHaveText('2 to add · 1 skipped · 2 with problems · new teams: Tigers');
+  await expect(admin.getByText('already on Lions')).toBeVisible();
+  await expect(admin.getByText('no name')).toBeVisible();
+  await expect(admin.getByText('jersey 7 is already used on Tigers in this file')).toBeVisible();
+
+  // Remapping: with no team column, everyone goes to a chosen team.
+  await admin.getByLabel('Team', { exact: true }).selectOption('');
+  await expect(admin.getByLabel('Add everyone to')).toBeVisible();
+  await admin.getByLabel('Team', { exact: true }).selectOption('2');
+
+  await btn(admin, 'Import 2 players').click();
+  await expect(admin.getByText('Added 2 players and 1 new teams.')).toBeVisible();
+  await expect(admin.getByTestId('team-Lions').getByText('2 players')).toBeVisible();
+  await expect(admin.getByTestId('team-Tigers').getByText('1 players')).toBeVisible();
+  await expect(admin.getByTestId('team-Lions').getByText('Boateng, Yaw')).toBeVisible();
+});

@@ -961,3 +961,27 @@ journey) + viewer 2; typecheck clean.
 - Refused events stay on the device that recorded them (no admin re-entry flow).
 - Admin screens use the current look and will be restyled with the scorer's new direction.
 - Latency warm-up: first 1-2 taps after load are slower (see landscape notes).
+
+### Roster import from CSV (admin, Teams & players)
+
+- Flow: upload a `.csv` or paste it -> **map the columns** (Full name, or First + Last; Jersey;
+  Team; each "(not in file)" allowed) -> preview every row -> import.
+- `admin/csv.ts` (pure, 11 tests):
+  - `parseCsv`: quoted fields, delimiters/newlines inside quotes, doubled quotes, CRLF, BOM,
+    blank lines; comma / semicolon / tab detected from the header line; cells trimmed; short
+    rows padded. Hand-written (~40 lines) instead of adding a CSV library.
+  - `guessMapping`: from header names (Player/Name, First/Given, Last/Surname/Family,
+    Jersey/Shirt/Number/No./#, Team/Club).
+  - `planImport`: per row `add` / `skip` / `error` with a reason: no name; jersey not 0-99/00;
+    no team; duplicate row in the file (skip); already on that team (skip, name match ignoring
+    case and spacing); jersey used twice on one team in the file. Team names match existing teams
+    ignoring case (existing spelling kept); unknown teams are listed and created on import.
+    Without a Team column, a "Add everyone to" team picker appears.
+- `importRoster(league, plan)` creates the new teams, then inserts players per team with
+  `default_jersey`.
+- e2e: a messy file (renamed headers, quoted "Boateng, Yaw", wrong-case team, an existing player,
+  a missing name, a clashing jersey): guessed mapping, preview reasons, remapping without a team
+  column, import, resulting team counts. It caught the success message being hidden inside the
+  collapsed section after import (fixed).
+- Not done: names written "Last, First" are imported as written (could add a "swap Last, First"
+  option).

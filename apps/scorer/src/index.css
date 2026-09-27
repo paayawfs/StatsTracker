@@ -216,3 +216,10 @@ td.bad { color: var(--miss); font-weight: 700; }
 .row-event .t { color: var(--muted); min-width: 5em; font-variant-numeric: tabular-nums; }
 .flag { color: #ffb020; font-weight: 600; font-size: 0.85em; }
 @media (max-width: 600px) { .form-grid { grid-template-columns: 1fr; } }
+.csv-import summary { cursor: pointer; font-weight: 600; }
+.csv-import { gap: 8px; }
+.csv-preview { max-height: 320px; overflow: auto; }
+tr.csv-add td:last-child { color: var(--make); }
+tr.csv-skip { color: var(--muted); }
+tr.csv-error td:last-child { color: var(--miss); font-weight: 600; }
+.admin p.ok { color: var(--make); font-weight: 600; }

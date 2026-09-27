@@ -1,6 +1,7 @@
 import { useSignal } from '@preact/signals';
 import { boxScore, describe, eventsCsv, FIBA, formatClock, NBA, seasonTotals, summarize, type GameEvent, type GameLog, type RuleSet } from '@stats/core';
 import type { ComponentChildren } from 'preact';
+import { CsvImport } from './csv-import';
 import { useEffect } from 'preact/hooks';
 import {
   addAdmin, addPlayers, addSeason, addTeam, adminWrite, codes, createCode, createGame, createLeague, db, download, gameLog, gameRoster, games, latency,
@@ -203,6 +204,7 @@ function Teams({ league }: { league: League }) {
         <button class="primary" disabled={!newTeam.value.trim() || act.busy}>Add team</button>
       </form>
       <Err msg={act.error || error} />
+      <CsvImport league={league.id} teams={data.teams} players={data.players} done={reload} />
       <div class="team-cards">
         {data.teams.map((t) => (
           <TeamCard key={t.id} team={t} players={data.players.filter((p) => p.team_id === t.id)} text={paste.value[t.id] ?? ''}

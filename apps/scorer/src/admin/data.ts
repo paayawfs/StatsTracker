@@ -48,7 +48,7 @@ export const seasons = async (league: string) => must(await db.from('seasons').s
 export const addSeason = async (league: string, name: string) => must(await db.from('seasons').insert({ league_id: league, name }).select().single());
 
 export const teams = async (league: string) => must(await db.from('teams').select('id, name').eq('league_id', league).order('name')) as TeamRow[];
-export const addTeam = async (league: string, name: string) => must(await db.from('teams').insert({ league_id: league, name }).select().single());
+export const addTeam = async (league: string, name: string) => must(await db.from('teams').insert({ league_id: league, name }).select('id, name').single()) as TeamRow;
 export const players = async (teamIds: string[]) =>
   (teamIds.length ? must(await db.from('players').select('id, team_id, name, default_jersey').in('team_id', teamIds).order('name')) : []) as PlayerRow[];
 
@@ -145,4 +145,19 @@ export function download(name: string, text: string, type: string) {
   const a = Object.assign(document.createElement('a'), { href: url, download: name });
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** Apply a CSV import plan: create the new teams, then add every "add" row as a player. */
+export async function importRoster(league: string, plan: import('./csv').ImportPlan): Promise<number> {
+  const key = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+  const ids = new Map<string, string>();
+  for (const name of plan.newTeams) ids.set(key(name), (await addTeam(league, name)).id);
+  const byTeam = new Map<string, { name: string; default_jersey: string | null }[]>();
+  for (const r of plan.rows) {
+    if (r.status !== 'add') continue;
+    const id = r.teamId ?? ids.get(key(r.team))!;
+    byTeam.set(id, [...(byTeam.get(id) ?? []), { name: r.name, default_jersey: r.jersey }]);
+  }
+  for (const [team, rows] of byTeam) await addPlayers(team, rows);
+  return [...byTeam.values()].reduce((n, rows) => n + rows.length, 0);
 }
