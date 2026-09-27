@@ -1,7 +1,8 @@
 import { useSignal } from '@preact/signals';
-import { formatClock, remaining, type Split, type Team, type ZoneGroup } from '@stats/core';
+import { formatClock, remaining, ZONES, type ShotZone, type Split, type Team, type ZoneGroup } from '@stats/core';
+import { Court, toScreen } from '@stats/ui';
 import { useEffect } from 'preact/hooks';
-import { minutes, pct, signed } from './format';
+import { heat, minutes, pct, signed } from './format';
 import { box, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
 
 type Tab = 'box' | 'plays' | 'lineups' | 'onoff' | 'shots';
@@ -234,7 +235,7 @@ function OnOff({ g, team }: { g: PublicGame; team: Team }) {
   );
 }
 
-const ZONES: [ZoneGroup, string][] = [
+const GROUPS: [ZoneGroup, string][] = [
   ['restricted', 'Restricted area'],
   ['paint', 'Paint'],
   ['midRange', 'Mid-range'],
@@ -242,54 +243,63 @@ const ZONES: [ZoneGroup, string][] = [
   ['aboveBreak3', 'Above-break 3'],
 ];
 
+/** Section heat map on the court (made/att per section, coloured by FG%), shots on top, grouped table below. */
 function Shots({ g }: { g: PublicGame }) {
   const filter = useSignal<Team | 'all'>('all');
   const c = shots.value;
+  const split = (z: ShotZone) => (filter.value === 'all' ? { made: c.zones.A[z].made + c.zones.B[z].made, att: c.zones.A[z].att + c.zones.B[z].att } : c.zones[filter.value][z]);
+  const fills: Partial<Record<ShotZone, string>> = {};
+  const labels: Partial<Record<ShotZone, string>> = {};
+  for (const { id } of ZONES) {
+    const s = split(id);
+    const color = heat(s.made, s.att);
+    if (color) fills[id] = color;
+    if (s.att) labels[id] = `${s.made}/${s.att}`;
+  }
+  const visible = c.shots.filter((s) => filter.value === 'all' || s.team === filter.value);
   return (
-    <section>
+    <section class="shots">
       <div class="filters">
         {(['all', 'A', 'B'] as const).map((f) => (
           <button key={f} class={filter.value === f ? 'on' : ''} onClick={() => (filter.value = f)}>
-            {f === 'all' ? 'Both' : g.teams[f]}
+            {f === 'all' ? 'Both teams' : g.teams[f]}
           </button>
         ))}
       </div>
-      <svg class="court" viewBox="0 0 150 140" data-testid="shot-chart">
-        <rect x="0" y="0" width="150" height="140" class="floor" />
-        <path d="M9 140 V110.1 A67.5 67.5 0 0 1 141 110.1 V140" class="line" />
-        <rect x="50" y="82" width="50" height="58" class="line" />
-        <circle cx="75" cy="124.25" r="2.25" class="line" />
-        {c.shots
-          .filter((s) => filter.value === 'all' || s.team === filter.value)
-          .map((s) =>
-            s.made ? (
-              <circle key={s.id} cx={s.x * 150} cy={140 - s.y * 140} r="2.6" class={`made team-${s.team}`} />
+      <div class="shots-layout">
+        <Court id="viewer-court" testId="shot-chart" fills={fills} labels={labels}>
+          {visible.map((s) => {
+            const { sx, sy } = toScreen(s.x, s.y);
+            return s.made ? (
+              <circle key={s.id} class={`made team-${s.team}`} cx={sx} cy={sy} r="2.3" />
             ) : (
-              <path key={s.id} d={`M${s.x * 150 - 2.2} ${138 - s.y * 140 - 0.2} l4.4 4.4 m0 -4.4 l-4.4 4.4`} class={`miss team-${s.team}`} />
-            ),
-          )}
-      </svg>
-      <table>
-        <thead>
-          <tr>
-            <th class="name">Zone</th>
-            <th>{g.teams.A}</th>
-            <th>{g.teams.B}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {ZONES.map(([z, label]) => (
-            <tr key={z}>
-              <td class="name">{label}</td>
-              {(['A', 'B'] as const).map((t) => (
-                <td key={t}>
-                  {c.groups[t][z].made}-{c.groups[t][z].att} <small>{pct(c.groups[t][z].made, c.groups[t][z].att)}</small>
-                </td>
-              ))}
+              <path key={s.id} class={`miss team-${s.team}`} d={`M${sx - 2} ${sy - 2} l4 4 m0 -4 l-4 4`} />
+            );
+          })}
+        </Court>
+        <table>
+          <thead>
+            <tr>
+              <th class="name">Zone</th>
+              <th>{g.teams.A}</th>
+              <th>{g.teams.B}</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {GROUPS.map(([z, label]) => (
+              <tr key={z}>
+                <td class="name">{label}</td>
+                {(['A', 'B'] as const).map((t) => (
+                  <td key={t}>
+                    {c.groups[t][z].made}-{c.groups[t][z].att} <small>{pct(c.groups[t][z].made, c.groups[t][z].att)}</small>
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p class="small">Numbers on the court are made/attempted per section; colour runs from cold (blue) to hot (orange), stronger with more attempts. ● made · ✕ missed.</p>
     </section>
   );
 }

@@ -1041,3 +1041,14 @@ players as jersey chips in two side rails, one bottom dock for everything else.
 - e2e updates: a `menu(page, item)` helper for items now in ☰; opponent selection shows the shot
   buttons disabled rather than hidden; the result card reads "3 Made". All 16 scorer e2e and 2
   viewer e2e pass; screenshots checked at 740x360, 844x390, 1180x820 and 390x844.
+
+### Step 3: viewer in direction C, section heat map
+
+- Viewer uses the same palette, fonts (bundled) and chip/number styling as the scorer: white
+  sticky scoreboard, pill tabs, tables on white cards with a sticky name column.
+- Shot chart = shared `Court` with a **heat map per section**: made/attempted label, colour
+  from `heat(made, att)` (`format.ts`, tested): hue by FG% (blue 0% -> orange-red 100%),
+  strength grows with attempts (capped) so one lucky shot doesn't look hot. Made dots / missed
+  crosses on top in team colours; team filter; the 5-group table (restricted area, paint,
+  mid-range, corner 3, above-break 3) beside it.
+- Checked with a scripted game of 10 located shots: section labels, colours and the table agree.

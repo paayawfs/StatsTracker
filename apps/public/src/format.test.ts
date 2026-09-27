@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { minutes, pct, signed } from './format';
+import { heat, minutes, pct, signed } from './format';
 
 describe('format', () => {
   test('minutes as m:ss', () => {
@@ -19,5 +19,17 @@ describe('format', () => {
     expect(signed(-2)).toBe('-2');
     expect(signed(null)).toBe('-');
     expect(signed(4.44, 1)).toBe('+4.4');
+  });
+});
+
+describe('heat', () => {
+  test('no attempts: no colour', () => {
+    expect(heat(0, 0)).toBeUndefined();
+  });
+  test('cold is blue, hot is orange-red; more attempts, stronger colour', () => {
+    expect(heat(0, 4)).toBe('hsla(215, 75%, 50%, 0.53)');
+    expect(heat(4, 4)).toBe('hsla(12, 85%, 52%, 0.53)');
+    expect(heat(1, 1)).toBe('hsla(12, 85%, 52%, 0.32)');
+    expect(heat(10, 20)).toBe('hsla(114, 80%, 51%, 0.6)');
   });
 });
