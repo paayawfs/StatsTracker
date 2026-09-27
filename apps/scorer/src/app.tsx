@@ -5,7 +5,7 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { Input } from './logic/entry';
 import {
-  can, checkpoint, claim, correct, endGame, endPeriod, entry, events, info, input, join, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
+  can, checkpoint, claim, correct, endGame, endPeriod, entry, events, info, input, join, leave, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
   pending, playersById, rejected, resume, setClock, showHelp, startGame, state, tapToRender, toggleClock, typed, undo, type Player,
 } from './session';
 
@@ -543,6 +543,7 @@ function Menu({ close, open }: { close: () => void; open: (p: 'log' | 'roles') =
         {control && item(`Jump won ${gi.teams.A}`, () => jump('A'))}
         {control && item(`Jump won ${gi.teams.B}`, () => jump('B'))}
         {item('Keyboard shortcuts', () => (showHelp.value = true))}
+        {item('Leave game', leave, 'leave')}
       </div>
     </div>
   );

@@ -1130,3 +1130,7 @@ players as jersey chips in two side rails, one bottom dock for everything else.
 - Lane lines extended split top-of-key from wings (2s and 3s). The corner-line height (2.99 m, where the straight 3PT line meets the arc) splits corner/wing for both 2s and 3s: one dashed line from sideline to lane. First cut used the FT line extended for the 2s, which made the wing middies a thin strip under the arc.
 - FIBA Points in the Paint (`TeamLine.pitp`) = made located shots in restricted + paint. Unlocated shots don't count. It's the only official FIBA location stat (Stats Manual 2024).
 - Zones are derived from stored x/y, so no migration. Old events re-bucket automatically.
+
+## Leave game (2026-09-27)
+
+- The scorer resumes the last game on the device (`scorer.game` in localStorage) and had no way out, so a device that once joined a multi-device game as Team A stayed on it. Menu → **Leave game** calls the existing `leave()`: closes sync, forgets the game, back to the join screen. Events stay in IndexedDB and on the server, so rejoining with the code picks up where it was (e2e).

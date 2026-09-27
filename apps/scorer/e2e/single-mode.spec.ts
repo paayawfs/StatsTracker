@@ -128,3 +128,17 @@ test('possession arrow: shown for FIBA rules, hidden when the rule set turns it 
   await expect(page.getByRole('button', { name: 'Jump won Lions' })).toBeVisible();
   await expect(page.getByTestId('arrow')).toHaveCount(0);
 });
+
+test('leave game: back to the join screen, rejoining picks up where it was', async ({ page }) => {
+  const g = await createGame();
+  await joinAndStart(page, g.code);
+  await player(page, 'A', 4).click();
+  await btn(page, '2 ✓').click();
+  await btn(page, 'Skip').click();
+  await expect(page.getByTestId('score-A')).toHaveText('2');
+  await menu(page, 'Leave game');
+  await expect(page.getByLabel('Game code')).toBeVisible();
+  await page.getByLabel('Game code').fill(g.code);
+  await page.getByRole('button', { name: 'Join game' }).click();
+  await expect(page.getByTestId('score-A')).toHaveText('2');
+});
