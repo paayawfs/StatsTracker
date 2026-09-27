@@ -985,3 +985,25 @@ journey) + viewer 2; typecheck clean.
   collapsed section after import (fixed).
 - Not done: names written "Last, First" are imported as written (could add a "swap Last, First"
   option).
+
+## Redesign: direction C (court-first), chosen 2026-09-27
+
+Mockups: https://claude.ai/artifact/Doh5nvgkJ1bChxzwdeRTM8 (A scoresheet, B broadcast, C court-first).
+C: the court is the main input (player chip -> tap the court -> Made/Miss card at the spot),
+players as jersey chips in two side rails, one bottom dock for everything else.
+
+### Step 1: 12 shot sections (core)
+
+- Research: NBA official stats combine a basic zone (restricted area, paint, mid-range, corner 3,
+  above-the-break 3) with a left/centre/right area cut by angle from the basket; 82games uses 14
+  zones (5 three-point, 5 mid-range, 4 paint); FIBA LiveStats records the exact spot.
+- `court.ts`: `ZONES` (12, each with label and point value) and `shotZone(x, y)`:
+  restricted area (1.25 m, FIBA no-charge arc), paint (4.9 x 5.8 m key), mid-range left/right
+  baseline, left/right wing, top of key; left/right corner 3 (below 2.99 m); left/right wing 3,
+  top 3. Area by angle from the basket: side < 30 deg, wing 30-78, centre 78-102. Left/right as
+  drawn (baseline at the bottom). `zoneGroup()` maps sections to the 5 basic zones.
+- The exact tap point is still stored (`x`, `y`); the section is derived, so charts keep full
+  precision.
+- `shotChart` now returns `zones` (12 per team) and `groups` (5 per team).
+- Tests: 14 location cases + consistency of every section with `shotValue`; shot chart tests
+  rewritten. Core: 196.

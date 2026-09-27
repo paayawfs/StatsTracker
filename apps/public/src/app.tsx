@@ -1,5 +1,5 @@
 import { useSignal } from '@preact/signals';
-import { formatClock, remaining, type ShotZone, type Split, type Team } from '@stats/core';
+import { formatClock, remaining, type Split, type Team, type ZoneGroup } from '@stats/core';
 import { useEffect } from 'preact/hooks';
 import { minutes, pct, signed } from './format';
 import { box, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
@@ -234,7 +234,8 @@ function OnOff({ g, team }: { g: PublicGame; team: Team }) {
   );
 }
 
-const ZONES: [ShotZone, string][] = [
+const ZONES: [ZoneGroup, string][] = [
+  ['restricted', 'Restricted area'],
   ['paint', 'Paint'],
   ['midRange', 'Mid-range'],
   ['corner3', 'Corner 3'],
@@ -282,7 +283,7 @@ function Shots({ g }: { g: PublicGame }) {
               <td class="name">{label}</td>
               {(['A', 'B'] as const).map((t) => (
                 <td key={t}>
-                  {c.zones[t][z].made}-{c.zones[t][z].att} <small>{pct(c.zones[t][z].made, c.zones[t][z].att)}</small>
+                  {c.groups[t][z].made}-{c.groups[t][z].att} <small>{pct(c.groups[t][z].made, c.groups[t][z].att)}</small>
                 </td>
               ))}
             </tr>
