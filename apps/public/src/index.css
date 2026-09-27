@@ -72,6 +72,7 @@ tr.dnp { color: var(--muted); }
 .court-zone { fill: transparent; }
 .court-divider path { stroke: var(--wood-line); stroke-width: 0.55; stroke-dasharray: 1.6 1.6; opacity: 0.7; fill: none; }
 .court-line rect, .court-line path { fill: none; stroke: var(--wood-line); stroke-width: 1.1; }
+.court-paint rect, .court-paint path { fill: none; stroke: var(--wood-line); stroke-width: 0.7; opacity: 0.35; }
 .court-board { stroke: #6b5536; stroke-width: 1.2; }
 .court-rim { fill: none; stroke: #d9480f; stroke-width: 1.1; }
 .court-label { font: 800 7px var(--num); fill: var(--text); paint-order: stroke; stroke: rgba(255, 255, 255, 0.75); stroke-width: 1.6px; }

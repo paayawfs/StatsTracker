@@ -239,9 +239,9 @@ function OnOff({ g, team }: { g: PublicGame; team: Team }) {
 }
 
 const GROUPS: [ZoneGroup, string][] = [
-  ['restricted', 'Restricted area'],
-  ['paint', 'Paint'],
-  ['midRange', 'Mid-range'],
+  ['rim', 'At the rim'],
+  ['shortMid', 'Short mid-range'],
+  ['longMid', 'Long mid-range'],
   ['corner3', 'Corner 3'],
   ['aboveBreak3', 'Above-break 3'],
 ];

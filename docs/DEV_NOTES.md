@@ -1081,3 +1081,17 @@ players as jersey chips in two side rails, one bottom dock for everything else.
   shows initials and full name.
 - Gotcha: Playwright `reuseExistingServer` silently tested a stale build while manual-test
   preview servers were running on 4173/4174. Stop them (or rebuild) before running e2e.
+
+### Court re-cut into rings (user reference image, 2026-09-28)
+
+- Sections now follow the standard shot-chart cut from the user's reference: **at the rim**
+  (0-2.44 m / 8 ft circle), **short mid-range** ring (2.44-4.88 m / 8-16 ft), **long mid-range**
+  from the ring to the arc in 5 slices (left/right baseline < 30 deg, left/right wing 30-78,
+  top 78-102), **corner 3** left/right, **above-the-break 3** left/top/right. Still 12.
+- Replaces restricted area + paint (which followed the painted key). Group names:
+  `rim`, `shortMid`, `longMid`, `corner3`, `aboveBreak3`.
+- `packages/ui`: rim circle and short ring drawn as dashed dividers; angle dividers start at
+  the ring; label/snap points moved inside their new sections (tests pass). The key, FT circle
+  and no-charge arc are drawn faintly (floor paint, not section boundaries).
+- Tests: core 198 (16 location cases), ui 6; e2e 16 + 2. Screenshot check: the viewer heat map
+  matches the reference layout.

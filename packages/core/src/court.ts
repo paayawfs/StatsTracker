@@ -16,13 +16,13 @@ export function shotValue(x: number, y: number): 2 | 3 {
 }
 
 /**
- * 12 shot sections: NBA-style basic zone (restricted area, paint, mid-range, corner 3,
- * above-the-break 3) crossed with left / centre / right area, on FIBA lines. Left and right are
- * as drawn: baseline at the bottom of the screen, x = 0 on the left.
+ * 12 shot sections, the usual shot-chart cut: distance rings from the basket (at the rim 0-8 ft,
+ * short mid-range 8-16 ft, long mid-range 16 ft to the arc, three) crossed with left / centre /
+ * right by angle. Left and right are as drawn: baseline at the bottom of the screen.
  */
 export const ZONES = [
-  { id: 'restricted', label: 'Restricted area', value: 2 },
-  { id: 'paint', label: 'Paint', value: 2 },
+  { id: 'rim', label: 'At the rim', value: 2 },
+  { id: 'shortMid', label: 'Short mid-range', value: 2 },
   { id: 'midLeftBaseline', label: 'Left baseline', value: 2 },
   { id: 'midLeftWing', label: 'Left wing', value: 2 },
   { id: 'midTop', label: 'Top of key', value: 2 },
@@ -36,19 +36,19 @@ export const ZONES = [
 ] as const;
 export type ShotZone = (typeof ZONES)[number]['id'];
 
-/** NBA basic zones, for the grouped table. */
-export type ZoneGroup = 'restricted' | 'paint' | 'midRange' | 'corner3' | 'aboveBreak3';
+/** The five rings/groups, for the grouped table. */
+export type ZoneGroup = 'rim' | 'shortMid' | 'longMid' | 'corner3' | 'aboveBreak3';
 export function zoneGroup(z: ShotZone): ZoneGroup {
-  if (z === 'restricted' || z === 'paint') return z;
-  if (z.startsWith('mid')) return 'midRange';
+  if (z === 'rim' || z === 'shortMid') return z;
+  if (z.startsWith('mid')) return 'longMid';
   return z.startsWith('corner') ? 'corner3' : 'aboveBreak3';
 }
 
-const RESTRICTED = 1.25; // FIBA no-charge semicircle radius
-const KEY_HALF_WIDTH = 2.45; // key is 4.9 m wide
-const FT_LINE = 5.8; // key depth from the baseline
-// Area cut by angle from the basket (0 deg = along the baseline to the right): side < 30,
-// wing 30-78, centre 78-102, mirrored on the left.
+/** Ring radii from the basket, in metres (8 ft and 16 ft). */
+export const RIM_R = 2.44;
+export const SHORT_R = 4.88;
+// Area cut by angle from the basket (0 deg = along the baseline): side < 30, wing 30-78,
+// centre 78-102, mirrored on the left.
 const SIDE = 30;
 const CENTRE = 78;
 
@@ -57,15 +57,16 @@ export function shotZone(x: number, y: number): ShotZone {
   const ym = y * HALF;
   const dy = ym - BASKET_Y;
   const left = dx < 0;
-  const angle = dy <= 0 ? 0 : (Math.atan2(dy, Math.abs(dx)) * 180) / Math.PI; // 0..90 from the baseline, per side
+  const angle = dy <= 0 ? 0 : (Math.atan2(dy, Math.abs(dx)) * 180) / Math.PI;
   const area = angle < SIDE ? 'side' : angle < CENTRE ? 'wing' : 'centre';
 
   if (shotValue(x, y) === 3) {
     if (ym <= CORNER_Y) return left ? 'corner3Left' : 'corner3Right';
     return area === 'centre' ? 'top3' : left ? 'wing3Left' : 'wing3Right';
   }
-  if (Math.hypot(dx, dy) <= RESTRICTED) return 'restricted';
-  if (Math.abs(dx) <= KEY_HALF_WIDTH && ym <= FT_LINE) return 'paint';
+  const dist = Math.hypot(dx, dy);
+  if (dist <= RIM_R) return 'rim';
+  if (dist <= SHORT_R) return 'shortMid';
   if (area === 'centre') return 'midTop';
   if (area === 'side') return left ? 'midLeftBaseline' : 'midRightBaseline';
   return left ? 'midLeftWing' : 'midRightWing';

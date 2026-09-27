@@ -120,6 +120,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .court-zone.is-hit { fill: color-mix(in srgb, var(--a) 30%, transparent); }
 .court-divider path { stroke: var(--wood-line); stroke-width: 0.55; stroke-dasharray: 1.6 1.6; opacity: 0.7; fill: none; }
 .court-line rect, .court-line path { fill: none; stroke: var(--wood-line); stroke-width: 1.1; }
+.court-paint rect, .court-paint path { fill: none; stroke: var(--wood-line); stroke-width: 0.7; opacity: 0.35; }
 .court-board { stroke: #6b5536; stroke-width: 1.2; }
 .court-rim { fill: none; stroke: #d9480f; stroke-width: 1.1; }
 .court-spot { stroke: #fff; stroke-width: 1.2; }

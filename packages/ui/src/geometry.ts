@@ -12,6 +12,9 @@ export const ARC_R = 67.5;
 export const CORNER_Y = 110.1; // where the straight corner lines meet the arc
 export const RESTRICTED_R = 12.5;
 export const KEY = { x: 50, y: 82, w: 50, h: 58 };
+/** Section rings (8 ft and 16 ft from the basket), in SVG units. */
+export const RIM_RING = 24.4;
+export const SHORT_RING = 48.8;
 
 export const toCourt = (sx: number, sy: number) => ({ x: sx / W, y: (H - sy) / H });
 export const toScreen = (x: number, y: number) => ({ sx: x * W, sy: H - y * H });
@@ -28,10 +31,10 @@ export const INSIDE_ARC = `M9 ${H} V${CORNER_Y} A${ARC_R} ${ARC_R} 0 0 1 141 ${C
 
 /** Where each section's label (or heat value) is drawn; inside the section (tested). */
 export const ZONE_LABEL_AT: Record<ShotZone, [number, number]> = {
-  restricted: [75, 118],
-  paint: [75, 94],
-  midLeftBaseline: [28, 127],
-  midRightBaseline: [122, 127],
+  rim: [75, 118],
+  shortMid: [75, 88],
+  midLeftBaseline: [22, 130],
+  midRightBaseline: [128, 130],
   midLeftWing: [40, 80],
   midRightWing: [110, 80],
   midTop: [75, 66],

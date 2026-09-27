@@ -1,6 +1,6 @@
 import { ZONES, type ShotZone } from '@stats/core';
 import type { ComponentChildren, JSX } from 'preact';
-import { ARC_R, BASKET, CORNER_Y, H, INSIDE_ARC, KEY, RESTRICTED_R, ray, toCourt, W, wedge, ZONE_LABEL_AT } from './geometry';
+import { ARC_R, BASKET, CORNER_Y, H, INSIDE_ARC, KEY, RESTRICTED_R, RIM_RING, ray, SHORT_RING, toCourt, W, wedge, ZONE_LABEL_AT } from './geometry';
 
 export interface CourtProps {
   /** Tap on the court, in normalised court coordinates. */
@@ -26,14 +26,14 @@ const side = (left: boolean) => (left ? `M0 ${BASKET.y} H75 V${H} H0 Z ${wedge(1
  * the arc, then `cut` (black) removed. Mirrors `shotZone` in core; a unit test checks each label
  * point lands in its own section.
  */
-const SHAPES: Record<ShotZone, { keep: string; insideArc?: boolean; cut: ('arc' | 'key' | 'rim' | 'centre')[] }> = {
-  restricted: { keep: circle(), cut: [] },
-  paint: { keep: rect(KEY.x, KEY.y, KEY.w, KEY.h), cut: ['rim'] },
-  midLeftBaseline: { keep: side(true), insideArc: true, cut: ['key', 'rim'] },
-  midRightBaseline: { keep: side(false), insideArc: true, cut: ['key', 'rim'] },
-  midLeftWing: { keep: wedge(102, 150), insideArc: true, cut: ['key', 'rim'] },
-  midRightWing: { keep: wedge(30, 78), insideArc: true, cut: ['key', 'rim'] },
-  midTop: { keep: wedge(78, 102), insideArc: true, cut: ['key', 'rim'] },
+const SHAPES: Record<ShotZone, { keep: string; insideArc?: boolean; cut: ('arc' | 'inner' | 'rim' | 'centre')[] }> = {
+  rim: { keep: circle(RIM_RING), cut: [] },
+  shortMid: { keep: circle(SHORT_RING), cut: ['rim'] },
+  midLeftBaseline: { keep: side(true), insideArc: true, cut: ['inner'] },
+  midRightBaseline: { keep: side(false), insideArc: true, cut: ['inner'] },
+  midLeftWing: { keep: wedge(102, 150), insideArc: true, cut: ['inner'] },
+  midRightWing: { keep: wedge(30, 78), insideArc: true, cut: ['inner'] },
+  midTop: { keep: wedge(78, 102), insideArc: true, cut: ['inner'] },
   corner3Left: { keep: rect(0, CORNER_Y, 75, H - CORNER_Y), cut: ['arc'] },
   corner3Right: { keep: rect(75, CORNER_Y, 75, H - CORNER_Y), cut: ['arc'] },
   wing3Left: { keep: rect(0, 0, 75, CORNER_Y), cut: ['arc', 'centre'] },
@@ -44,12 +44,11 @@ const SHAPES: Record<ShotZone, { keep: string; insideArc?: boolean; cut: ('arc' 
 function rect(x: number, y: number, w: number, h: number) {
   return `M${x} ${y} h${w} v${h} h${-w} Z`;
 }
-function circle() {
+function circle(r: number) {
   const { x, y } = BASKET;
-  const r = RESTRICTED_R;
   return `M${x - r} ${y} a${r} ${r} 0 1 0 ${2 * r} 0 a${r} ${r} 0 1 0 ${-2 * r} 0 Z`;
 }
-const CUTS = { arc: INSIDE_ARC, key: rect(KEY.x, KEY.y, KEY.w, KEY.h), rim: circle(), centre: wedge(78, 102) };
+const CUTS = { arc: INSIDE_ARC, inner: circle(SHORT_RING), rim: circle(RIM_RING), centre: wedge(78, 102) };
 
 /** FIBA half court with the 12 shot sections. Baseline at the bottom. */
 export function Court({ onTap, highlight, fills = {}, labels = {}, children, class: cls, testId, id = 'court' }: CourtProps) {
@@ -78,16 +77,19 @@ export function Court({ onTap, highlight, fills = {}, labels = {}, children, cla
       {ZONES.map(({ id: z }) => (
         <rect key={z} class={`court-zone${highlight === z ? ' is-hit' : ''}`} data-zone={z} mask={`url(#${id}-${z})`} width={W} height={H} style={fills[z] ? { fill: fills[z] } : undefined} />
       ))}
-      {/* Section dividers: angle cuts inside the arc (outside the key), corner/wing split outside it. */}
+      {/* Section dividers: the two rings, angle cuts beyond the inner ring, corner/wing split outside the arc. */}
+      <g class="court-divider">
+        <path d={circle(RIM_RING)} />
+        <path d={circle(SHORT_RING)} />
+      </g>
       <g class="court-divider" clip-path={`url(#${id}-in)`}>
         {[30, 78, 102, 150].map((a) => (
-          <path key={a} d={`M${BASKET.x} ${BASKET.y} L${ray(a)}`} mask={`url(#${id}-notkey)`} />
+          <path key={a} d={`M${BASKET.x} ${BASKET.y} L${ray(a)}`} mask={`url(#${id}-outer)`} />
         ))}
       </g>
-      <mask id={`${id}-notkey`} maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
+      <mask id={`${id}-outer`} maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
         <rect width={W} height={H} fill="white" />
-        <path d={CUTS.key} fill="black" />
-        <path d={CUTS.rim} fill="black" />
+        <path d={CUTS.inner} fill="black" />
       </mask>
       <mask id={`${id}-outarc`} maskUnits="userSpaceOnUse" x="0" y="0" width={W} height={H}>
         <rect width={W} height={H} fill="white" />
@@ -101,6 +103,9 @@ export function Court({ onTap, highlight, fills = {}, labels = {}, children, cla
       <g class="court-line">
         <rect x="0.5" y="0.5" width={W - 1} height={H - 1} />
         <path d={`M9 ${H} V${CORNER_Y} A${ARC_R} ${ARC_R} 0 0 1 141 ${CORNER_Y} V${H}`} />
+      </g>
+      {/* Floor paint that isn't a section boundary (key, FT circle, no-charge arc): drawn faintly. */}
+      <g class="court-paint">
         <rect x={KEY.x} y={KEY.y} width={KEY.w} height={KEY.h} />
         <path d={`M${KEY.x + 7} ${KEY.y} A18 18 0 0 1 ${KEY.x + KEY.w - 7} ${KEY.y}`} />
         <path d={`M${BASKET.x - RESTRICTED_R} ${BASKET.y} A${RESTRICTED_R} ${RESTRICTED_R} 0 0 1 ${BASKET.x + RESTRICTED_R} ${BASKET.y}`} />
