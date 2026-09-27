@@ -526,3 +526,29 @@ conflict notifications, peer latency hook), deterministic network simulator. Cor
   auth-js + postgrest-js + realtime-js alone = 48.5 KB. Kept full supabase-js: ~11 KB only on
   first load (the service worker caches after), and hand-wiring auth tokens into PostgREST and
   Realtime is where token-refresh bugs would live. Revisit if first-load time on 3G matters.
+
+### Step 2: entry logic (pure, tested)
+
+- `apps/scorer/src/logic/entry.ts`: the two-tap state machine. `step(entry, input, ctx)` ->
+  `{ entry, events }`. `ctx` = current `GameState`, the effective log and `stamp(body)` (wraps
+  an `EventBody` in an envelope). No UI, fully unit-tested (35 tests).
+  - Player first, then action. Prompts after actions: assist (made shot), rebound (missed shot /
+    missed last FT), turnover kind then steal (turnover), foul kind -> fouled player -> FT count
+    (shooting/unsportsmanlike/disqualifying). **Prompts never block**: a tap that isn't an
+    answer skips the prompt and starts a new selection. Only the substitution is modal (confirm or skip).
+  - Rebound kind is derived: same team as the last shooter = offensive.
+  - Personal-foul free throws come from the team-foul bonus (core `teamFoulCount` + rule set).
+    Technical = `rules.technicalFreeThrows`, no fouled player; the shooter is picked at the line.
+  - Offensive foul also records a turnover (`offensiveFoul`) for the same player (FIBA counting).
+  - Block / steal / late assist: defender (or teammate) first, then BLK / STL / AST, which amends
+    the last matching shot or turnover.
+  - Assist and steal prompts amend the event just recorded (decision 4: emit first, amend after).
+  - Court tap -> `shotValue(x, y)` suggests 2 or 3 from FIBA lines (`court.ts`); the scorer can
+    flip it before Made/Miss. The four plain shot buttons work with or without location.
+- `logic/undo.ts`: `undoLast(log, deviceId, undone)` -> `{ undoes, body }`. Voids my last
+  non-session event. If that event is itself a correction, it restores what the correction
+  replaced (core ignores corrections of corrections). The app keeps `undone` (undone ids + undo
+  markers) so repeated undo walks back.
+- `logic/clock.ts`: running time from the reducer's last start/stop; `10:00` format, tenths in
+  the last minute.
+- core: new `EventBody` type (any event's `{type, payload}` without the envelope).

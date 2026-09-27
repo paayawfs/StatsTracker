@@ -135,6 +135,8 @@ export const EventSchema = v.intersect([
 export type GameEvent = v.InferOutput<typeof EventSchema>;
 export type EventType = GameEvent['type'];
 export type EventOf<T extends EventType> = Extract<GameEvent, { type: T }>;
+/** An event without its envelope: what the UI decides, before id/device/clock are stamped on. */
+export type EventBody = { [K in EventType]: { type: K; payload: EventOf<K>['payload'] } }[EventType];
 
 /** Validate untrusted input at a boundary (network, storage, import). */
 export const parseEvent = (input: unknown) => v.safeParse(EventSchema, input);
