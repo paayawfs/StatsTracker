@@ -780,3 +780,15 @@ possession estimates); the box score includes FIBA efficiency (EFF).
 - Tests: a hand-verified fixture game (every number worked out by hand in the test comment) +
   properties on random logs (team points = scoreboard = sum of player points; team REB/TO = player
   sums + team-only).
+
+### Step 2: lineups and on/off (core)
+
+- `stats/lineups.ts`: `lineups(events)` -> per team, every unit (sorted player ids) with minutes,
+  points for/against, +/- and +/- per 40 minutes, most minutes first. `onOff(events)` -> per
+  roster player, the same split with the player on the floor and off it (off = team totals - on).
+  `per40` is null with no minutes.
+- Scores are credited to the unit on the floor at the scoring event (same rule as box +/-).
+- The fixture game moved to `stats/fixture.ts`, shared by the box and lineup tests.
+- Tests: exact units and on/off splits for the fixture; properties on random logs (per team,
+  lineup minutes = time played and lineup +/- sum = score margin; per player, on + off = whole
+  game).

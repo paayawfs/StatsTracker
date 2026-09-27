@@ -5,3 +5,4 @@ export * from './log';
 export * from './validate';
 export * from './stats/walk';
 export * from './stats/box';
+export * from './stats/lineups';
