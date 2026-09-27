@@ -869,3 +869,25 @@ with FIBA columns + EFF, `lineups`, `onOff` with per-40, `shotChart` with zones,
   take 50-154 ms (warm-up); later taps have a median of ~13 ms. The p95 < 50 ms assertion sits
   near the edge and failed once in four runs. To address: warm-up or excluding the first taps
   from the budget is a decision, not a test tweak.
+
+## Phase 7: admin, exports, season totals, latency
+
+Assumptions (stated at the start, user asked to proceed while reviewing the redesign options):
+admin screens live in the scorer app at `/admin` (brief: the scorer app serves scorers and
+admins); admins sign in with email + password (no mail server needed); exports are built in the
+browser; season totals are a pure core function. Out of scope: re-entering events a device had
+refused (they stay on that device), email invites. Admin screens use the current styling and
+will be restyled with the scorer once a visual direction is picked.
+
+### Step 1: database
+
+- Migration `20260927150000_admin`:
+  - `players.default_jersey`, used to pre-fill game rosters (the roster keeps its per-game copy).
+  - `add_league_admin(league, email)`: league admins add a co-admin by the email of an existing
+    non-anonymous account; returns false if none.
+  - `latency_samples` (game, device, kind `render`|`peer`, ms) + `record_latency(game, device,
+    samples)` for scorer devices (members only, at most 500 per batch). Only league admins can
+    read samples.
+- pgTAP `08_admin` (11 tests). Test-side fixes on the way: read `auth.users` before logging in;
+  Postgres rounds a float 12.5 half-to-even (compare the exact value); log in as the scorer before
+  testing `record_latency` validation. Total pgTAP: 98.
