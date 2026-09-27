@@ -903,3 +903,12 @@ will be restyled with the scorer once a visual direction is picked.
     CRLF; unconfirmed events have an empty `seq`.
   - `summarize(samples)`: n, p50, p95, max (for the latency dashboard).
 - 9 tests; core total 183.
+
+### Step 3: scorer uploads latency samples
+
+- `logic/latency.ts` (+3 tests): `latencyUploader(send)` buffers `{kind, ms}` samples, uploads in
+  batches of at most 500, keeps samples when an upload fails, drops the oldest past 2000.
+  (Implementation written in the same pass as its tests.)
+- Session: every tap-to-render sample (`measureTap`) and every peer fast-path receipt
+  (`onPeerLatency`) is added; flushed every 15 s and when the app goes to the background, via
+  `record_latency`. `window.__scorer.flushLatency()` for e2e.

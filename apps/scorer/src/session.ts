@@ -6,6 +6,7 @@ import { remaining } from '@stats/core';
 import { idle, step, type Entry, type Input } from './logic/entry';
 import { keyCommand, promptTeam, resolveJersey } from './logic/keys';
 import { capabilities, heldRoles, roleFor } from './logic/ownership';
+import { latencyUploader } from './logic/latency';
 import { undoLast } from './logic/undo';
 
 const LOCAL_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
@@ -64,6 +65,8 @@ export const can = computed(() => capabilities(state.value, myDevice.value));
 export const playersById = computed(() => new Map((info.value?.players ?? []).map((p) => [p.id, p])));
 
 let sync: GameSync | null = null;
+/** Latency samples go to the server for the admin dashboard (brief section 4). */
+let uploader: ReturnType<typeof latencyUploader> | null = null;
 let lastStamp = { deviceSeq: 0, wallClock: 0 };
 const undone = new Set<string>();
 
@@ -142,7 +145,17 @@ async function open(gameInfo: GameInfo) {
     rejected.value = s.rejected.map((r) => ({ event: r.event, reason: r.rejected ?? '' }));
   };
   s.onChange = refresh;
-  s.onPeerLatency = (_, ms) => (peerLatency.value = [...peerLatency.value.slice(-199), ms]);
+  uploader = latencyUploader(async (batch) => {
+    const { error } = await supabase.rpc('record_latency', { game: s.gameId, device: s.deviceId, samples: batch });
+    if (error) throw error;
+  });
+  const up = uploader;
+  setInterval(() => void up.flush(), 15_000);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && void up.flush());
+  s.onPeerLatency = (_, ms) => {
+    peerLatency.value = [...peerLatency.value.slice(-199), ms];
+    up.add('peer', ms);
+  };
   s.onRejected = (_, reason) => (notice.value = `The server refused an event: ${reason}`);
   s.onConflict = () => (notice.value = 'Another scorer changed an event you corrected. The latest change wins.');
   setInterval(() => {
@@ -291,7 +304,9 @@ export function endGame() {
 export function measureTap(start: number) {
   requestAnimationFrame(() =>
     setTimeout(() => {
-      tapToRender.value = [...tapToRender.value.slice(-199), performance.now() - start];
+      const ms = performance.now() - start;
+      tapToRender.value = [...tapToRender.value.slice(-199), ms];
+      uploader?.add('render', ms);
     }),
   );
 }
@@ -353,3 +368,6 @@ export function onKey(e: KeyboardEvent) {
   }
   measureTap(t);
 }
+
+/** Upload buffered latency samples now (also runs every 15 s and when the app is hidden). */
+export const flushLatency = () => uploader?.flush();
