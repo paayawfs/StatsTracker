@@ -25,7 +25,7 @@ export interface ShotChart {
 }
 
 const emptyZones = () => Object.fromEntries(ZONES.map((z) => [z.id, { made: 0, att: 0 }])) as Record<ShotZone, Split>;
-const emptyGroups = (): Record<ZoneGroup, Split> => ({ rim: { made: 0, att: 0 }, shortMid: { made: 0, att: 0 }, longMid: { made: 0, att: 0 }, corner3: { made: 0, att: 0 }, aboveBreak3: { made: 0, att: 0 } });
+const emptyGroups = (): Record<ZoneGroup, Split> => ({ restricted: { made: 0, att: 0 }, paint: { made: 0, att: 0 }, midRange: { made: 0, att: 0 }, corner3: { made: 0, att: 0 }, aboveBreak3: { made: 0, att: 0 } });
 
 /** Shots with a court location, plus made/attempted per zone and team. Unlocated shots are skipped. */
 export function shotChart(events: readonly GameEvent[]): ShotChart {

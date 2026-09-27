@@ -1123,3 +1123,10 @@ players as jersey chips in two side rails, one bottom dock for everything else.
   it).
 - e2e fixture `createGame(shotLocations, mode, rules)`; `pickStartersAndStart` accepts a 10:00 or
   12:00 period. New e2e: FIBA game shows the arrow, NBA game doesn't. All: core 200, e2e 19 + 2.
+
+## Court sections on painted lines (2026-09-27)
+
+- 12 sections, every edge a painted line or its extension: restricted area (no-charge arc), paint (non-RA, rest of the key), 5 mid-range (left/right baseline, left/right wing, top of key), 5 threes (left/right corner, left/right wing, top of key).
+- Lane lines extended split top-of-key from wings (2s and 3s). The corner-line height (2.99 m, where the straight 3PT line meets the arc) splits corner/wing for both 2s and 3s: one dashed line from sideline to lane. First cut used the FT line extended for the 2s, which made the wing middies a thin strip under the arc.
+- FIBA Points in the Paint (`TeamLine.pitp`) = made located shots in restricted + paint. Unlocated shots don't count. It's the only official FIBA location stat (Stats Manual 2024).
+- Zones are derived from stored x/y, so no migration. Old events re-bucket automatically.

@@ -10,34 +10,27 @@ export const H = 140;
 export const BASKET = { x: 75, y: 124.25 };
 export const ARC_R = 67.5;
 export const CORNER_Y = 110.1; // where the straight corner lines meet the arc
-export const RESTRICTED_R = 12.5;
-export const KEY = { x: 50, y: 82, w: 50, h: 58 };
-/** Section rings (8 ft and 16 ft from the basket), in SVG units. */
-export const RIM_RING = 24.4;
-export const SHORT_RING = 48.8;
+export const RESTRICTED_R = 12.5; // no-charge semicircle
+export const KEY = { x: 50, y: 82, w: 50, h: 58 }; // lane lines at x 50 / 100, FT line at y 82
 
 export const toCourt = (sx: number, sy: number) => ({ x: sx / W, y: (H - sy) / H });
 export const toScreen = (x: number, y: number) => ({ sx: x * W, sy: H - y * H });
 
-/** Point at `deg` (0 = along the baseline to the right, 90 = straight up court) far from the basket. */
-export const ray = (deg: number, r = 400) => {
-  const t = (deg * Math.PI) / 180;
-  return `${(BASKET.x + r * Math.cos(t)).toFixed(2)} ${(BASKET.y - r * Math.sin(t)).toFixed(2)}`;
-};
-export const wedge = (from: number, to: number) => `M${BASKET.x} ${BASKET.y} L${ray(from)} L${ray((from + to) / 2)} L${ray(to)} Z`;
+export const rect = (x: number, y: number, w: number, h: number) => `M${x} ${y} h${w} v${h} h${-w} Z`;
+export const circle = (r: number, { x, y } = BASKET) => `M${x - r} ${y} a${r} ${r} 0 1 0 ${2 * r} 0 a${r} ${r} 0 1 0 ${-2 * r} 0 Z`;
 
 /** Inside the three-point line (closed along the baseline). */
 export const INSIDE_ARC = `M9 ${H} V${CORNER_Y} A${ARC_R} ${ARC_R} 0 0 1 141 ${CORNER_Y} V${H} Z`;
 
 /** Where each section's label (or heat value) is drawn; inside the section (tested). */
 export const ZONE_LABEL_AT: Record<ShotZone, [number, number]> = {
-  rim: [75, 118],
-  shortMid: [75, 88],
-  midLeftBaseline: [22, 130],
-  midRightBaseline: [128, 130],
-  midLeftWing: [40, 80],
-  midRightWing: [110, 80],
-  midTop: [75, 66],
+  restricted: [75, 120],
+  paint: [75, 100],
+  midLeftBaseline: [30, 126],
+  midRightBaseline: [120, 126],
+  midLeftWing: [30, 92],
+  midRightWing: [120, 92],
+  midTop: [75, 64],
   corner3Left: [4.5, 126],
   corner3Right: [145.5, 126],
   wing3Left: [18, 62],

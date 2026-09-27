@@ -1,3 +1,4 @@
+import { inPaint, shotZone } from '../court';
 import type { GameEvent, Team } from '../events';
 import { walk } from './walk';
 
@@ -41,6 +42,8 @@ export interface TeamLine extends Counts {
   teamTo: number;
   /** Coach and bench fouls (not in `pf`). */
   benchFouls: number;
+  /** FIBA Points in the Paint: made field goals located in the restricted area or the paint. Unlocated shots don't count. */
+  pitp: number;
 }
 
 export interface BoxScore {
@@ -56,8 +59,8 @@ export const efficiency = (c: Counts) => c.pts + c.reb + c.ast + c.stl + c.blk -
 export function boxScore(events: readonly GameEvent[]): BoxScore {
   const players = new Map<string, PlayerLine>();
   const teams: Record<Team, TeamLine> = {
-    A: { ...zero(), teamReb: 0, teamTo: 0, benchFouls: 0 },
-    B: { ...zero(), teamReb: 0, teamTo: 0, benchFouls: 0 },
+    A: { ...zero(), teamReb: 0, teamTo: 0, benchFouls: 0, pitp: 0 },
+    B: { ...zero(), teamReb: 0, teamTo: 0, benchFouls: 0, pitp: 0 },
   };
   const line = (id: string | undefined) => (id ? players.get(id) : undefined);
   /** Add to a player's line and their team's line. */
@@ -97,6 +100,9 @@ export function boxScore(events: readonly GameEvent[]): BoxScore {
           add(shooter, value === 3 ? 'p3m' : 'p2m');
           add(shooter, 'pts', pts);
           add(assist, 'ast');
+          const { x, y } = e.payload;
+          const team = line(shooter)?.team;
+          if (team && x !== undefined && y !== undefined && inPaint(shotZone(x, y))) teams[team].pitp += pts;
         }
         add(block, 'blk');
         break;

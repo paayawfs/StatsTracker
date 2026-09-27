@@ -90,3 +90,4 @@ tr.dnp { color: var(--muted); }
 .avatar { display: inline-grid; place-items: center; flex: 0 0 auto; border-radius: 50%; object-fit: cover; font-weight: 700; color: #fff; line-height: 1; background: var(--muted); }
 .avatar.initials.team-A { background: var(--a); }
 .avatar.initials.team-B { background: var(--b); }
+.team-extra { margin: 6px 2px 0; } .team-extra b { color: var(--text); font-family: var(--num); font-size: 1.05rem; }

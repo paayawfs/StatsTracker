@@ -91,9 +91,9 @@ test('changing your mind: tapping another section before Made/Missed moves the s
   const court = page.getByTestId('court');
   const box = (await court.boundingBox())!;
   await court.click({ position: { x: box.width * 0.5, y: box.height * 0.1 } }); // top 3
-  await expect(page.getByText('Top 3')).toBeVisible();
+  await expect(page.getByText('Top of key 3')).toBeVisible();
   await court.click({ position: { x: box.width * 0.5, y: box.height * 0.85 } }); // near the rim instead
-  await expect(page.getByText('At the rim')).toBeVisible();
+  await expect(page.getByText('Restricted area')).toBeVisible();
   await btn(page, '2 Made').click();
   await expect(page.getByTestId('score-A')).toHaveText('2');
   await expect.poll(async () => (await serverEvents(g.slug)).filter((e) => e.type === 'shot').map((e) => e.payload.value)).toEqual([2]);

@@ -1,7 +1,7 @@
 import fc from 'fast-check';
 import { describe, expect, test } from 'vitest';
 import { replay } from '../reducer';
-import { arbGameLog } from '../test-helpers';
+import { arbGameLog, ev, gameStart, periodStart } from '../test-helpers';
 import { boxScore } from './box';
 import { fixture, MIN } from './fixture';
 
@@ -88,5 +88,21 @@ describe('boxScore properties on random logs', () => {
         }
       }),
     );
+  });
+});
+
+describe('points in the paint (FIBA)', () => {
+  test('made field goals located in the restricted area or the paint', () => {
+    const box = boxScore([
+      gameStart(),
+      periodStart(),
+      ev('shot', { shooter: 'a1', value: 2, made: true, x: 0.5, y: 0.12 }), // restricted area
+      ev('shot', { shooter: 'a2', value: 2, made: true, x: 0.55, y: 0.3 }), // paint
+      ev('shot', { shooter: 'a3', value: 2, made: false, x: 0.5, y: 0.3 }), // paint, missed
+      ev('shot', { shooter: 'a4', value: 2, made: true, x: 0.2, y: 0.1 }), // baseline middy
+      ev('shot', { shooter: 'b1', value: 2, made: true }), // no location: not counted
+    ]);
+    expect(box.teams.A.pitp).toBe(4);
+    expect(box.teams.B.pitp).toBe(0);
   });
 });

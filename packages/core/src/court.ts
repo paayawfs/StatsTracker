@@ -16,13 +16,15 @@ export function shotValue(x: number, y: number): 2 | 3 {
 }
 
 /**
- * 12 shot sections, the usual shot-chart cut: distance rings from the basket (at the rim 0-8 ft,
- * short mid-range 8-16 ft, long mid-range 16 ft to the arc, three) crossed with left / centre /
- * right by angle. Left and right are as drawn: baseline at the bottom of the screen.
+ * 12 shot sections, every boundary a line painted on a FIBA floor (or its extension), so a
+ * scorer judges them by eye: the no-charge arc (restricted area), the key (paint), the
+ * free-throw line extended (baseline vs wing), the lane lines extended (wing vs top of key), and
+ * the three-point line (corner vs above the break). Left and right are as drawn: baseline at the
+ * bottom of the screen.
  */
 export const ZONES = [
-  { id: 'rim', label: 'At the rim', value: 2 },
-  { id: 'shortMid', label: 'Short mid-range', value: 2 },
+  { id: 'restricted', label: 'Restricted area', value: 2 },
+  { id: 'paint', label: 'Paint (non-RA)', value: 2 },
   { id: 'midLeftBaseline', label: 'Left baseline', value: 2 },
   { id: 'midLeftWing', label: 'Left wing', value: 2 },
   { id: 'midTop', label: 'Top of key', value: 2 },
@@ -30,44 +32,40 @@ export const ZONES = [
   { id: 'midRightBaseline', label: 'Right baseline', value: 2 },
   { id: 'corner3Left', label: 'Left corner 3', value: 3 },
   { id: 'wing3Left', label: 'Left wing 3', value: 3 },
-  { id: 'top3', label: 'Top 3', value: 3 },
+  { id: 'top3', label: 'Top of key 3', value: 3 },
   { id: 'wing3Right', label: 'Right wing 3', value: 3 },
   { id: 'corner3Right', label: 'Right corner 3', value: 3 },
 ] as const;
 export type ShotZone = (typeof ZONES)[number]['id'];
 
-/** The five rings/groups, for the grouped table. */
-export type ZoneGroup = 'rim' | 'shortMid' | 'longMid' | 'corner3' | 'aboveBreak3';
+/** NBA-style basic zones, for the grouped table. */
+export type ZoneGroup = 'restricted' | 'paint' | 'midRange' | 'corner3' | 'aboveBreak3';
 export function zoneGroup(z: ShotZone): ZoneGroup {
-  if (z === 'rim' || z === 'shortMid') return z;
-  if (z.startsWith('mid')) return 'longMid';
+  if (z === 'restricted' || z === 'paint') return z;
+  if (z.startsWith('mid')) return 'midRange';
   return z.startsWith('corner') ? 'corner3' : 'aboveBreak3';
 }
 
-/** Ring radii from the basket, in metres (8 ft and 16 ft). */
-export const RIM_R = 2.44;
-export const SHORT_R = 4.88;
-// Area cut by angle from the basket (0 deg = along the baseline): side < 30, wing 30-78,
-// centre 78-102, mirrored on the left.
-const SIDE = 30;
-const CENTRE = 78;
+/** FIBA Points in the Paint: made field goals from inside the key (restricted area included). */
+export const inPaint = (z: ShotZone) => z === 'restricted' || z === 'paint';
+
+const RESTRICTED = 1.25; // no-charge semicircle radius
+export const KEY_HALF_WIDTH = 2.45; // key is 4.9 m wide: lane lines at +-2.45 m
+export const FT_LINE = 5.8; // free-throw line, metres from the baseline
 
 export function shotZone(x: number, y: number): ShotZone {
   const dx = (x - 0.5) * WIDTH;
   const ym = y * HALF;
-  const dy = ym - BASKET_Y;
   const left = dx < 0;
-  const angle = dy <= 0 ? 0 : (Math.atan2(dy, Math.abs(dx)) * 180) / Math.PI;
-  const area = angle < SIDE ? 'side' : angle < CENTRE ? 'wing' : 'centre';
+  const betweenLaneLines = Math.abs(dx) <= KEY_HALF_WIDTH;
 
   if (shotValue(x, y) === 3) {
     if (ym <= CORNER_Y) return left ? 'corner3Left' : 'corner3Right';
-    return area === 'centre' ? 'top3' : left ? 'wing3Left' : 'wing3Right';
+    return betweenLaneLines ? 'top3' : left ? 'wing3Left' : 'wing3Right';
   }
-  const dist = Math.hypot(dx, dy);
-  if (dist <= RIM_R) return 'rim';
-  if (dist <= SHORT_R) return 'shortMid';
-  if (area === 'centre') return 'midTop';
-  if (area === 'side') return left ? 'midLeftBaseline' : 'midRightBaseline';
+  if (Math.hypot(dx, ym - BASKET_Y) <= RESTRICTED) return 'restricted';
+  if (betweenLaneLines && ym <= FT_LINE) return 'paint';
+  if (ym <= CORNER_Y) return left ? 'midLeftBaseline' : 'midRightBaseline';
+  if (betweenLaneLines) return 'midTop';
   return left ? 'midLeftWing' : 'midRightWing';
 }
