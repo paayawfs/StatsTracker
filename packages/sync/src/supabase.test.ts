@@ -1,7 +1,7 @@
 import type { GameEvent } from '@stats/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { describe, expect, test } from 'vitest';
-import { SupabaseTransport } from './supabase';
+import { SupabaseTransport, SupabaseViewerTransport } from './supabase';
 import { NetworkError, Rejected } from './transport';
 
 const stub = (rpc: () => Promise<unknown>) => new SupabaseTransport({ rpc } as unknown as SupabaseClient, 'g');
@@ -39,5 +39,22 @@ describe('SupabaseTransport error classification', () => {
     } as unknown as SupabaseClient, 'g');
     expect(await t.fetchSince(0)).toHaveLength(1001);
     expect(calls).toEqual([{ game: 'g', after_seq: 0 }, { game: 'g', after_seq: 1000 }]);
+  });
+});
+
+describe('SupabaseViewerTransport (read-only)', () => {
+  test('persist is always refused; nothing is ever broadcast', async () => {
+    const calls: unknown[] = [];
+    const t = new SupabaseViewerTransport({ rpc: async (...a: unknown[]) => (calls.push(a), { data: [], error: null, status: 200 }) } as unknown as SupabaseClient, 'slug1');
+    await expect(t.persist({} as GameEvent)).rejects.toBeInstanceOf(Rejected);
+    t.broadcast({ kind: 'discard', eventId: 'x' });
+    expect(calls).toEqual([]);
+  });
+
+  test('catch-up reads public_events by slug', async () => {
+    const calls: unknown[] = [];
+    const t = new SupabaseViewerTransport({ rpc: async (fn: string, args: unknown) => (calls.push([fn, args]), { data: [], error: null, status: 200 }) } as unknown as SupabaseClient, 'slug1');
+    await t.fetchSince(7);
+    expect(calls).toEqual([['public_events', { slug: 'slug1', after_seq: 7 }]]);
   });
 });

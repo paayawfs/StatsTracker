@@ -2,7 +2,7 @@ import { computed, signal } from '@preact/signals';
 import { initialState, periodLength, type EventBody, type EventOf, type GameEvent, type GameState, type Role, type RuleSet, type Team } from '@stats/core';
 import { GameSync, LocalStore, SupabaseTransport, supabaseClientOptions } from '@stats/sync';
 import { createClient } from '@supabase/supabase-js';
-import { remaining } from './logic/clock';
+import { remaining } from '@stats/core';
 import { idle, step, type Entry, type Input } from './logic/entry';
 import { keyCommand, promptTeam, resolveJersey } from './logic/keys';
 import { capabilities, heldRoles, roleFor } from './logic/ownership';
@@ -125,7 +125,7 @@ async function open(gameInfo: GameInfo) {
   let prevRoles = heldRoles(s.log.state, s.deviceId);
   const refresh = () => {
     state.value = s.log.state;
-    events.value = s.log.events;
+    events.value = s.log.events.slice(); // GameLog mutates one array; a new one notifies signals
     const last = s.log.events.at(-1);
     if (last && last.id !== lastSeen) {
       lastSeen = last.id;

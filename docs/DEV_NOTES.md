@@ -807,3 +807,47 @@ possession estimates); the box score includes FIBA efficiency (EFF).
   start/stop, checkpoints, arrow).
 - The scorer now uses core's `shotValue` and `describe`, so there's one copy of each. Scorer e2e
   (11) still passes.
+
+### Step 4: public viewer app
+
+- `apps/public` (Preact + signals, 77 KB gzip): `/g/<slug>` -> live scoreboard (score, clock,
+  period, LIVE / reconnecting / FINAL) and tabs: Box score (both teams, all roster players,
+  team totals with shooting %), Play-by-play (newest first, running score, scoring rows marked),
+  Lineups, On/Off (+/- per 40 difference), Shot chart (when the game has locations: SVG court,
+  made dots / missed crosses per team, zone table). Phone-first; tables scroll sideways with the
+  name column pinned.
+- **Viewers reuse `GameSync`** with a new read-only `SupabaseViewerTransport` (sync package):
+  `view:<slug>` private channel, `public_events` catch-up, `persist` always refused, never
+  broadcasts. Viewers therefore get the tested gap detection, reconnect catch-up and IndexedDB
+  cache. Poll every 30 s (not 10 s) to spare the server when many are watching.
+- Stats are computed lazily per tab (`computed` signals read only by the visible tab).
+- `vercel.json` rewrites `/g/*` to `index.html` for static hosting.
+- `format.ts` (+ tests): `m:ss` minutes, shooting %, signed +/-.
+- `clock.ts` (running game time, formatting) moved from the scorer into core, shared by both apps.
+- **Bug found by the viewer e2e (fixed in both apps):** `GameLog.events` is one array mutated in
+  place; assigning it to a signal again is a no-op, so computed stats (box score) never
+  recomputed. Both apps now hand the signal `events.slice()`. The scorer only hid this because
+  other state changes re-rendered its play-by-play.
+- e2e (`apps/public/e2e`, scorer on 4173 + viewer on 4174, production builds): a scorer records
+  a located 3, a miss and a rebound; the viewer's score updates **73 ms** after the tap (local;
+  budget 2 s); the box row, play-by-play, shot chart and lineups are right; a late viewer loads
+  the full history; an unknown slug shows "Game not found". Root `pnpm e2e` runs both apps.
+
+## Phase 6 report
+
+**Built:** derived stats as pure core functions over the effective log (`walk`, `boxScore`
+with FIBA columns + EFF, `lineups`, `onOff` with per-40, `shotChart` with zones,
+`playByPlay`/`describe`); court geometry and clock helpers moved into core; the public viewer app.
+
+**Verified:** unit core 174 (hand-verified fixture game + property tests: team points = scoreboard
+= sum of players; lineup minutes = time played; lineup +/- = margin; on + off = whole game), sync
+49, scorer 71, public 3; e2e scorer 11 + viewer 2; viewer checked by eye at 390 px.
+
+**Not verified / open:**
+- Minutes need the scorer to record events while the clock runs. Time between the last event
+  and "now" is not counted live; it lands when the next event (or period end) arrives.
+- Stats recompute from the full log on each update: fine for a game (~1000 events), not measured
+  on a low-end phone.
+- No viewer batching (decision 7). Not load-tested with many viewers.
+- The public app is not yet deployed (Vercel config is in place; hosting is Phase 7 or when you
+  choose).

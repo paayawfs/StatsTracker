@@ -16,13 +16,18 @@ export class SupabaseTransport implements SyncTransport {
   private channel?: RealtimeChannel;
 
   constructor(
-    private readonly client: SupabaseClient,
+    protected readonly client: SupabaseClient,
     private readonly gameId: string,
+    private readonly options: {
+      topic: string;
+      catchUp: (afterSeq: number) => [fn: string, args: object];
+      readOnly: boolean;
+    } = { topic: `game:${gameId}`, catchUp: (after) => ['game_events', { game: gameId, after_seq: after }], readOnly: false },
   ) {}
 
   connect(h: TransportHandlers) {
     this.channel = this.client
-      .channel(`game:${this.gameId}`, { config: { private: true, broadcast: { self: false } } })
+      .channel(this.options.topic, { config: { private: true, broadcast: { self: false } } })
       .on('broadcast', { event: 'event' }, ({ payload }) => h.onEvent(payload))
       .on('broadcast', { event: 'discard' }, ({ payload }) => {
         if (typeof payload?.eventId === 'string') h.onDiscard(payload.eventId);
@@ -36,19 +41,20 @@ export class SupabaseTransport implements SyncTransport {
   broadcast(m: PeerMessage) {
     // Not joined yet (or reconnecting): skip. The durable path delivers the event anyway, and
     // realtime-js would otherwise fall back to one REST request per event.
-    if (this.channel?.state !== 'joined') return;
+    if (this.options.readOnly || this.channel?.state !== 'joined') return;
     const payload = m.kind === 'event' ? m.event : { eventId: m.eventId };
     void this.channel?.send({ type: 'broadcast', event: m.kind, payload }).catch(() => {});
   }
 
   async persist(event: GameEvent): Promise<number> {
+    if (this.options.readOnly) throw new Rejected('42501', 'read-only viewer');
     return Number(await this.call('insert_event', { event }));
   }
 
   async fetchSince(afterSeq: number): Promise<GameEvent[]> {
     const all: GameEvent[] = [];
     for (let after = afterSeq; ; ) {
-      const page = (await this.call('game_events', { game: this.gameId, after_seq: after })) as GameEvent[];
+      const page = (await this.call(...this.options.catchUp(after))) as GameEvent[];
       all.push(...page);
       if (page.length < PAGE) return all;
       after = page[page.length - 1]!.seq!;
@@ -78,5 +84,15 @@ export class SupabaseTransport implements SyncTransport {
     const refused = res.status >= 400 && res.status < 500 && ![401, 408, 429].includes(res.status);
     if (refused) throw new Rejected(res.error.code, res.error.message);
     throw new NetworkError(`${res.status} ${res.error.message}`);
+  }
+}
+
+/**
+ * Public viewers: the read-only `view:<slug>` channel and `public_events` catch-up. Used with
+ * GameSync so viewers get the same gap detection, reconnect catch-up and poll as scorers.
+ */
+export class SupabaseViewerTransport extends SupabaseTransport {
+  constructor(client: SupabaseClient, slug: string) {
+    super(client, slug, { topic: `view:${slug}`, catchUp: (after) => ['public_events', { slug, after_seq: after }], readOnly: true });
   }
 }

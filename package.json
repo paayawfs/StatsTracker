@@ -6,7 +6,7 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "dev:game": "tsx scripts/dev-game.ts",
-    "e2e": "pnpm --filter @stats/scorer e2e"
+    "e2e": "pnpm --filter @stats/scorer e2e && pnpm --filter @stats/public e2e"
   },
   "devDependencies": {
     "@supabase/supabase-js": "^2.117.2",

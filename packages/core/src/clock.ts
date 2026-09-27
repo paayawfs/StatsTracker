@@ -1,4 +1,4 @@
-import type { GameState } from '@stats/core';
+import type { GameState } from './reducer';
 
 /** Game time remaining (ms) at server-corrected time `now`. */
 export function remaining(clock: GameState['clock'], now: number): number {

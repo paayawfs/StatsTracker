@@ -2,7 +2,7 @@ import { useComputed, useSignal } from '@preact/signals';
 import { describe as describeEvent, FOUL_KINDS, teamFoulCount, timeoutsAllowed, type GameEvent, type Role, type Team } from '@stats/core';
 import type { JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
-import { formatClock, remaining } from './logic/clock';
+import { formatClock, remaining } from '@stats/core';
 import type { Input } from './logic/entry';
 import {
   can, checkpoint, claim, correct, endGame, endPeriod, entry, events, info, input, join, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
