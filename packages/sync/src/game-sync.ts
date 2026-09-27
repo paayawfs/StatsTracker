@@ -4,6 +4,9 @@ import { NetworkError, Rejected, type SyncTransport } from './transport';
 
 type Timer = (fn: () => void, ms: number, kind: 'retry' | 'poll') => void;
 
+/** A peer's fast-path event not made durable this long after a catch-up is dropped (it was refused, or the discard was missed). */
+export const PEER_GRACE_MS = 30_000;
+
 export interface GameSyncOptions {
   gameId: string;
   deviceId: string;
@@ -70,7 +73,10 @@ export class GameSync {
   static async open(o: GameSyncOptions): Promise<GameSync> {
     const sync = new GameSync(o);
     for (const { event, rejected } of await o.store.load(o.gameId)) {
-      if (event.deviceId === sync.deviceId) sync.deviceSeq = Math.max(sync.deviceSeq, event.deviceSeq);
+      const own = event.deviceId === sync.deviceId;
+      if (own) sync.deviceSeq = Math.max(sync.deviceSeq, event.deviceSeq);
+      // Other devices' refused or unconfirmed events: the server is the authority, catch-up brings the real ones.
+      if (!own && (rejected !== undefined || event.seq === null)) continue;
       if (rejected !== undefined) {
         sync.rejected.push({ event, rejected });
         continue;
@@ -120,7 +126,14 @@ export class GameSync {
 
   private receive(raw: unknown) {
     const parsed = parseEvent(raw);
-    if (!parsed.success || parsed.output.gameId !== this.gameId) return;
+    if (!parsed.success) {
+      // A durable event this client can't read (newer schema, cross-field rule) still fills its seq,
+      // or every later event looks like a gap and catch-up refetches the whole tail forever.
+      const r = raw as { gameId?: unknown; seq?: unknown } | null;
+      if (r?.gameId === this.gameId && typeof r.seq === 'number' && Number.isInteger(r.seq) && r.seq > 0) this.noteSeq(r.seq, false);
+      return;
+    }
+    if (parsed.output.gameId !== this.gameId) return;
     const e = parsed.output;
     if (e.seq === null && e.deviceId !== this.deviceId && !this.log.get(e.id)) this.onPeerLatency(e.id, this.now() - e.wallClock);
     this.apply(e);
@@ -133,7 +146,7 @@ export class GameSync {
       this.noteSeq(e.seq, true);
     }
     if (this.log.add(e) === -1) return;
-    void this.store.put(e);
+    if (e.seq !== null) void this.store.put(e); // peers' unconfirmed events live in memory only
     if (isCorrection(e)) this.checkConflict(e.payload.targetId);
     this.onChange();
   }
@@ -148,11 +161,11 @@ export class GameSync {
     this.onConflict(targetId, corrections);
   }
 
+  /** A peer says the server refused its event. Only unconfirmed peer events can be discarded this way. */
   private discard(id: string) {
     const e = this.log.get(id);
-    if (!e || this.log.discard(id) === -1) return;
-    void this.store.put(e, 'rejected by the server');
-    this.onChange();
+    if (!e || e.seq !== null || e.deviceId === this.deviceId) return;
+    if (this.log.discard(id) !== -1) this.onChange();
   }
 
   private setStatus(status: 'online' | 'offline') {
@@ -175,11 +188,19 @@ export class GameSync {
     this.catchingUp = true;
     try {
       for (const e of await this.transport.fetchSince(this.contiguous)) this.receive(e);
+      this.dropStalePeerEvents();
     } catch (err) {
       if (!(err instanceof NetworkError)) throw err;
     } finally {
       this.catchingUp = false;
     }
+  }
+
+  private dropStalePeerEvents() {
+    const cutoff = this.now() - PEER_GRACE_MS;
+    const stale = this.log.events.filter((e) => e.seq === null && e.deviceId !== this.deviceId && e.wallClock < cutoff);
+    for (const e of stale) this.log.discard(e.id);
+    if (stale.length) this.onChange();
   }
 
   /** Send the outbox in order, one at a time. Stops at the first network failure. */

@@ -150,3 +150,21 @@ describe('GameLog.discard', () => {
     expect(g.add({ ...local, seq: 9 })).toBe(0);
   });
 });
+
+describe('GameLog roles', () => {
+  test('follow write order, not game clock: a release then a claim a moment later on a skewed clock', () => {
+    const log = new GameLog();
+    log.add(ev('roleClaim', { role: 'teamA' }, { deviceId: 'x', role: 'teamA', seq: 1, gameClock: 0, period: 0 }));
+    log.add(ev('roleRelease', { role: 'teamA' }, { deviceId: 'x', role: 'teamA', seq: 2, gameClock: 300_000, wallClock: 1000 }));
+    // Written after the release, but this device's clock reads 0.2 s more.
+    log.add(ev('roleClaim', { role: 'teamA' }, { deviceId: 'y', role: 'teamA', seq: 3, gameClock: 300_200, wallClock: 1001 }));
+    expect(log.state.roles.teamA).toBe('y');
+  });
+
+  test('a release only frees a role its device holds', () => {
+    const log = new GameLog();
+    log.add(ev('roleClaim', { role: 'clock' }, { deviceId: 'x', role: 'clock', seq: 1 }));
+    log.add(ev('roleRelease', { role: 'clock' }, { deviceId: 'y', role: 'clock', seq: 2 }));
+    expect(log.state.roles.clock).toBe('x');
+  });
+});

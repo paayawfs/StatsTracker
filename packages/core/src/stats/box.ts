@@ -102,7 +102,7 @@ export function boxScore(events: readonly GameEvent[]): BoxScore {
           add(assist, 'ast');
           const { x, y } = e.payload;
           const team = line(shooter)?.team;
-          if (team && x !== undefined && y !== undefined && inPaint(shotZone(x, y))) teams[team].pitp += pts;
+          if (team && value === 2 && x !== undefined && y !== undefined && inPaint(shotZone(x, y))) teams[team].pitp += pts;
         }
         add(block, 'blk');
         break;

@@ -42,8 +42,9 @@ export function seasonTotals(games: readonly SeasonGame[]): { players: SeasonPla
   };
 
   for (const g of games) {
-    const box = boxScore(g.events);
     const final = replay(g.events);
+    if (final.phase === 'pregame') continue; // scheduled, not played
+    const box = boxScore(g.events);
     for (const line of box.players) {
       let p = players.get(line.playerId);
       if (!p) players.set(line.playerId, (p = { playerId: line.playerId, ...zeroTotals(), gp: 0, perGame: zeroTotals() }));

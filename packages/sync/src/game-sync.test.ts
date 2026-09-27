@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
+import { PEER_GRACE_MS } from './game-sync';
 import { SimNetwork } from './sim';
 import { client, conditions, startGame, tap } from './test-helpers';
 
@@ -135,6 +136,71 @@ describe('rejection', () => {
     a.sync.record(tap(a.sync, 'clockStart', {}));
     await net.settle();
     expect(net.server).toHaveLength(3); // the rejected one is never resent
+  });
+});
+
+describe('peer events that never become durable', () => {
+  test("a peer's refused event whose discard was missed is dropped after catch-up, and never stored", async () => {
+    const net = new SimNetwork();
+    const b = await client(net, 'B');
+    await net.settle();
+    const a = await client(net, 'A');
+    startGame(a.sync);
+    await net.settle();
+    b.sync.clockOffset = 0; // real time; the sim's server clock is virtual
+    const ghost = { ...shot(a.sync), wallClock: Date.now() - PEER_GRACE_MS - 1 };
+    b.t.handlers!.onEvent(ghost); // fast path only: the server never had it
+    expect(b.sync.log.state.score.A).toBe(2);
+    await net.advance(20_000); // the poll catches up
+    expect(b.sync.log.get(ghost.id)).toBeUndefined();
+    expect(b.sync.log.state.score.A).toBe(0);
+    const reloaded = await client(net, 'B', b.store);
+    expect(reloaded.sync.log.get(ghost.id)).toBeUndefined();
+  });
+
+  test("another device's refused event is not listed as this device's after a reload", async () => {
+    const net = new SimNetwork();
+    const a = await client(net, 'A');
+    const b = await client(net, 'B');
+    await net.settle();
+    startGame(a.sync);
+    await net.settle();
+    net.rejectIf = (e) => (e.type === 'shot' ? 'no' : null);
+    a.sync.record(shot(a.sync));
+    await net.settle();
+    const reloaded = await client(net, 'B', b.store);
+    expect(reloaded.sync.rejected).toEqual([]);
+  });
+
+  test('a discard aimed at a durable or own event is ignored', async () => {
+    const net = new SimNetwork();
+    const a = await client(net, 'A');
+    await net.settle();
+    startGame(a.sync);
+    const s = shot(a.sync);
+    a.sync.record(s);
+    a.t.handlers!.onDiscard(s.id); // own, still unconfirmed
+    await net.settle();
+    a.t.handlers!.onDiscard(s.id); // now durable
+    expect(a.sync.log.state.score.A).toBe(2);
+  });
+});
+
+describe('catch-up', () => {
+  test('a durable event this client cannot parse still counts toward its seq', async () => {
+    const net = new SimNetwork();
+    const a = await client(net, 'A');
+    await net.settle();
+    startGame(a.sync);
+    await net.settle();
+    const bad = { ...shot(a.sync), seq: 3, payload: { junk: true } };
+    net.server.push(bad as never); // e.g. written by a newer app version
+    a.sync.record(shot(a.sync));
+    await net.settle();
+    const fetches = vi.spyOn(a.t, 'fetchSince');
+    for (let i = 0; i < 5; i++) a.sync.record(shot(a.sync));
+    await net.settle();
+    expect(fetches.mock.calls.every(([after]) => after >= 3)).toBe(true);
   });
 });
 

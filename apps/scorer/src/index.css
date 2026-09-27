@@ -55,6 +55,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .join label { font-weight: 600; }
 .code-input { font-family: var(--num); font-size: 2.2rem; font-weight: 700; letter-spacing: 0.2em; text-align: center; text-transform: uppercase; }
 .code-input::placeholder { color: var(--muted); opacity: 0.45; font-size: 1.4rem; letter-spacing: 0.12em; }
+.pregame > .primary.big { position: sticky; bottom: 8px; box-shadow: var(--shadow); }
 .pregame-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .pregame-teams h2 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .pregame-teams .count { font-family: var(--num); font-size: 1.2rem; color: var(--muted); }
@@ -96,7 +97,8 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .team-B .meta { justify-content: flex-end; }
 .bonus { background: var(--miss); color: #fff; border-radius: 4px; padding: 0 5px; font-size: 0.65rem; letter-spacing: 0.05em; }
 .team-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
-.team-actions button { min-height: 30px; padding: 0.2em 0.4em; font-size: 0.72rem; border-radius: 999px; }
+.team-actions .accent { grid-column: 1 / -1; order: 9; } /* Team REB: own row, the others don't move */
+.team-actions button { min-height: 36px; padding: 0.2em 0.4em; font-size: 0.72rem; border-radius: 999px; }
 
 .center { display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; min-height: 0; }
 .topbar { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 6px 8px 2px; font-size: 0.78rem; color: var(--muted); }
@@ -140,8 +142,8 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
   background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); font-size: 0.8rem; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
 }
-.no-spot { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--surface); border-radius: 999px; box-shadow: var(--shadow); }
-.no-spot button { min-height: 32px; padding: 0 0.7em; font-size: 0.8rem; border-radius: 999px; }
+.no-spot { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--surface); border-radius: 999px; box-shadow: var(--shadow); }
+.no-spot button { min-height: 38px; padding: 0 0.7em; font-size: 0.8rem; border-radius: 999px; }
 .shot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: min(100%, 460px); }
 .shot-grid button { min-height: clamp(60px, 18dvh, 130px); font-family: var(--num); font-size: clamp(1.6rem, 6dvh, 2.6rem); border-radius: 16px; }
 .shot-grid.idle { opacity: 0.5; }
@@ -150,7 +152,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .card-title { font-weight: 700; font-size: 1.05rem; }
 .prompt { grid-template-columns: 1fr auto; align-items: center; }
 .picker-grid { display: grid; gap: 6px; }
-.picker-grid button { min-height: 42px; text-transform: capitalize; }
+.picker-grid button { min-height: 42px; min-width: 0; overflow-wrap: anywhere; text-transform: capitalize; }
 .picker-grid .big-num { font-family: var(--num); font-size: 1.8rem; min-height: 54px; }
 .sub-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; min-height: 2.5em; }
 .ft-bar {
@@ -174,7 +176,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 
 .toast { position: fixed; bottom: 64px; left: 50%; transform: translateX(-50%); z-index: 40; max-width: min(92vw, 560px); padding: 8px 14px; border-radius: 10px; background: #fff5dc; border: 1px solid #f2d28b; box-shadow: var(--shadow); cursor: pointer; }
 .menu-scrim { position: fixed; inset: 0; z-index: 30; }
-.menu { position: absolute; right: 8px; bottom: 60px; display: grid; min-width: 220px; padding: 6px; background: var(--surface); border-radius: 12px; box-shadow: 0 12px 30px -8px rgba(20, 24, 33, 0.45); }
+.menu { position: absolute; right: 8px; bottom: 60px; display: grid; max-height: calc(100dvh - 70px); overflow-y: auto; min-width: 220px; padding: 6px; background: var(--surface); border-radius: 12px; box-shadow: 0 12px 30px -8px rgba(20, 24, 33, 0.45); }
 .menu button { border: 0; text-align: left; min-height: 42px; background: none; }
 .menu button:hover { background: var(--surface-2); }
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 35; width: min(440px, 94vw); background: var(--surface); box-shadow: -10px 0 30px -12px rgba(20, 24, 33, 0.4); padding: 12px 16px; overflow: auto; display: grid; align-content: start; gap: 10px; }
@@ -215,7 +217,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
   :root { font-size: 14px; --rail: clamp(118px, 19vw, 170px); --chip: clamp(42px, 16dvh, 62px); }
   .rail { padding: 6px; gap: 4px; }
   .subbing .chips { --chip: clamp(30px, 9.5dvh, 44px); gap: 3px; }
-  .team-actions button { min-height: 26px; font-size: 0.66rem; padding: 0.1em 0.3em; }
+  .team-actions button { min-height: 32px; font-size: 0.66rem; padding: 0.1em 0.3em; }
   .topbar { padding-top: 4px; }
   .stage { padding: 2px 6px 6px; }
   .dock { padding: 4px 6px; }
@@ -223,7 +225,9 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
   .dock-actions button { min-width: 46px; font-size: 0.8rem; }
   .result-card { min-width: 170px; }
   .result-card button { min-height: 46px; }
-  .picker-grid button { min-height: 36px; }
+  .picker-grid button { min-height: 40px; font-size: 0.8rem; padding: 0 0.3em; }
+  .starter { min-height: 44px; padding-block: 3px; }
+  .starter-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .card { padding: 8px 10px; gap: 6px; }
   .sheet { margin: 2vh auto; padding: 12px 16px; }
 }
@@ -238,7 +242,9 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .admin-tabs { display: flex; gap: 6px; flex-wrap: wrap; }
 .admin-tabs button { border-radius: 999px; }
 .admin-tabs button.on { background: var(--text); border-color: var(--text); color: #fff; }
-.admin .row input { flex: 1; min-width: 12em; }
+.admin .row input { flex: 1; min-width: min(12em, 100%); }
+.admin code { overflow-wrap: anywhere; } /* long viewer links wrap on phones */
+.admin > * { min-width: 0; }
 .admin .list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 .link-row { background: none; border: 0; min-height: 0; padding: 4px 0; color: var(--b); text-decoration: underline; text-align: left; font-weight: 600; }
 .form-grid { display: grid; grid-template-columns: 12em 1fr; gap: 8px 12px; align-items: center; max-width: 660px; }
@@ -285,9 +291,9 @@ tr.csv-error td:last-child { color: var(--miss); font-weight: 600; }
 .avatar.initials.team-B { background: var(--b); }
 .starter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 6px; }
 .starter { position: relative; display: grid; grid-template-columns: auto 2.2em 1fr; align-items: center; gap: 8px; text-align: left; min-height: 54px; padding: 6px 10px 6px 6px; border-radius: 12px; box-shadow: var(--shadow); border-color: transparent; }
-.starter .jersey { font-family: var(--num); font-size: 1.5rem; font-weight: 800; text-align: center; }
-.team-A .starter .jersey { color: var(--a); }
-.team-B .starter .jersey { color: var(--b); }
+.starter .num { font-family: var(--num); font-size: 1.5rem; font-weight: 800; text-align: center; }
+.team-A .starter .num { color: var(--a); }
+.team-B .starter .num { color: var(--b); }
 .starter .pname { font-weight: 600; font-size: 0.9rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .team-A .starter.on { box-shadow: 0 0 0 2.5px var(--a), var(--shadow); background: color-mix(in srgb, var(--a) 9%, var(--surface)); }
 .team-B .starter.on { box-shadow: 0 0 0 2.5px var(--b), var(--shadow); background: color-mix(in srgb, var(--b) 9%, var(--surface)); }

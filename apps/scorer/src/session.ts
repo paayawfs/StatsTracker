@@ -70,7 +70,13 @@ let sync: GameSync | null = null;
 /** Latency samples go to the server for the admin dashboard (brief section 4). */
 let uploader: ReturnType<typeof latencyUploader> | null = null;
 let lastStamp = { deviceSeq: 0, wallClock: 0 };
-const undone = new Set<string>();
+/** Ids already undone plus undo markers; kept per game so Undo after a reload doesn't undo an undo. */
+let undone = new Set<string>();
+const undoneKey = (gameId: string) => `scorer.undone.${gameId}`;
+/** Stops the timers and listeners of the open game. */
+let stopTimers = () => {};
+/** Roles this device just released, so losing them isn't reported as a take-over. */
+const releasing = new Set<Role>();
 
 // ---- joining and resuming -------------------------------------------------------------------
 export async function join(code: string): Promise<void> {
@@ -117,21 +123,38 @@ export async function resume(): Promise<boolean> {
 }
 
 export function leave() {
+  stopTimers();
   sync?.close();
   sync = null;
+  void uploader?.flush();
+  uploader = null;
   localStorage.removeItem(INFO_KEY);
   info.value = null;
   state.value = initialState;
   events.value = [];
+  entry.value = idle;
+  notice.value = null;
+  online.value = false;
+  pending.value = 0;
+  rejected.value = [];
+  peerLatency.value = [];
+  releasing.clear();
 }
 
 async function open(gameInfo: GameInfo) {
+  stopTimers();
   const store = await LocalStore.open();
   sync = await GameSync.open({ gameId: gameInfo.gameId, deviceId: deviceId(), transport: new SupabaseTransport(supabase, gameInfo.gameId), store });
   const s = sync;
   let lastSeen = s.log.events.at(-1)?.id;
   let prevRoles = heldRoles(s.log.state, s.deviceId);
+  try {
+    undone = new Set(JSON.parse(localStorage.getItem(undoneKey(s.gameId)) ?? '[]') as string[]);
+  } catch {
+    undone = new Set();
+  }
   const refresh = () => {
+    if (sync !== s) return; // a request that finished after Leave game
     state.value = s.log.state;
     events.value = s.log.events.slice(); // GameLog mutates one array; a new one notifies signals
     const last = s.log.events.at(-1);
@@ -142,10 +165,13 @@ async function open(gameInfo: GameInfo) {
     const roles = heldRoles(s.log.state, s.deviceId);
     const lost = prevRoles.filter((r) => !roles.includes(r));
     const gained = roles.filter((r) => !prevRoles.includes(r));
-    if (lost.length) notice.value = `Your ${lost.map(roleName).join(' and ')} role was taken over by another device.`;
+    const takenOver = lost.filter((r) => !releasing.has(r));
+    for (const r of lost) releasing.delete(r);
+    if (takenOver.length) notice.value = `Your ${takenOver.map(roleName).join(' and ')} role was taken over by another device.`;
+    else if (lost.length) notice.value = null;
     else if (gained.length && prevRoles.length) notice.value = `You now hold ${gained.map(roleName).join(' and ')}.`;
     prevRoles = roles;
-    online.value = s.online;
+    online.value = s.online && navigator.onLine;
     pending.value = s.log.events.filter((e) => e.seq === null && e.deviceId === s.deviceId).length;
     rejected.value = s.rejected.map((r) => ({ event: r.event, reason: r.rejected ?? '' }));
   };
@@ -155,18 +181,26 @@ async function open(gameInfo: GameInfo) {
     if (error) throw error;
   });
   const up = uploader;
-  setInterval(() => void up.flush(), 15_000);
-  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && void up.flush());
+  const onHide = () => document.visibilityState === 'hidden' && void up.flush();
+  document.addEventListener('visibilitychange', onHide);
+  const timers = [setInterval(() => void up.flush(), 15_000)];
   s.onPeerLatency = (_, ms) => {
     peerLatency.value = [...peerLatency.value.slice(-199), ms];
     up.add('peer', ms);
   };
   s.onRejected = (_, reason) => (notice.value = `The server refused an event: ${reason}`);
   s.onConflict = () => (notice.value = 'Another scorer changed an event you corrected. The latest change wins.');
-  setInterval(() => {
-    online.value = s.online;
-    if (state.value.clock.running) now.value = s.now();
-  }, 100);
+  timers.push(
+    setInterval(() => {
+      online.value = s.online && navigator.onLine;
+      if (state.value.clock.running) now.value = s.now();
+    }, 100),
+  );
+  stopTimers = () => {
+    timers.forEach(clearInterval);
+    document.removeEventListener('visibilitychange', onHide);
+    stopTimers = () => {};
+  };
   myDevice.value = s.deviceId;
   info.value = gameInfo;
   refresh();
@@ -185,15 +219,18 @@ export function roleName(r: Role): string {
 }
 
 export function claim(role: Role) {
+  notice.value = null;
   record({ type: 'roleClaim', payload: { role } }, { role });
 }
 
 /** Take a role held by another (e.g. dead) device. Allowed for any joined scorer. */
 export function takeOver(role: Role) {
+  notice.value = null;
   record({ type: 'roleTransfer', payload: { role, toDeviceId: sync!.deviceId } }, { role });
 }
 
 export function release(role: Role) {
+  releasing.add(role);
   record({ type: 'roleRelease', payload: { role } }, { role });
 }
 
@@ -256,6 +293,7 @@ export function undo() {
   if (!u) return;
   const marker = stamp(u.body);
   undone.add(u.undoes).add(marker.id);
+  localStorage.setItem(undoneKey(sync.gameId), JSON.stringify([...undone]));
   sync.record(marker);
   entry.value = idle;
 }

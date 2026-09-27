@@ -144,7 +144,7 @@ describe('fouls', () => {
 
   test('technical queues free throws for any player of the other team', () => {
     const s = live(ev('foul', { team: 'B', offender: 'bench', kind: 'technical', freeThrows: 1 }));
-    expect(s.freeThrowQueue).toEqual([{ team: 'A', shooter: null, next: 1, of: 1 }]);
+    expect(s.freeThrowQueue).toEqual([{ team: 'A', shooter: null, next: 1, of: 1, deadBall: true }]);
   });
 
   test('free throws advance and clear the queue', () => {
@@ -154,6 +154,17 @@ describe('fouls', () => {
     const s2 = apply(s1, ev('freeThrow', { shooter: 'a1', made: true, attempt: 2, of: 2 }));
     expect(s2.freeThrowQueue).toEqual([]);
     expect(s2.score.A).toBe(2);
+  });
+
+  test('a missed last technical free throw is not reboundable', () => {
+    const tech = ev('foul', { team: 'B', offender: 'coach', kind: 'technical', freeThrows: 1 });
+    expect(live(tech, ev('freeThrow', { shooter: 'a2', made: false, attempt: 1, of: 1 })).reboundable).toBe(false);
+  });
+
+  test('an open free throw set (no named shooter) sticks to whoever shoots first', () => {
+    const tech = ev('foul', { team: 'B', offender: 'bench', kind: 'technical', freeThrows: 2 });
+    const s = live(tech, ev('freeThrow', { shooter: 'a2', made: true, attempt: 1, of: 2 }));
+    expect(s.freeThrowQueue).toEqual([{ team: 'A', shooter: 'a2', next: 2, of: 2, deadBall: true }]);
   });
 
   test('teamFoulCount: FIBA overtime continues the 4th period count, NBA resets', () => {

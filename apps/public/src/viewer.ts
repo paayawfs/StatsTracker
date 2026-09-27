@@ -21,6 +21,8 @@ export const game = signal<PublicGame | 'missing' | null>(null);
 export const events = signal<readonly GameEvent[]>([]);
 export const state = signal<GameState>(initialState);
 export const online = signal(false);
+/** Connected at least once: before that the header says "connecting", not "reconnecting". */
+export const everOnline = signal(false);
 export const now = signal(Date.now());
 
 const players = computed(() => new Map((game.value && game.value !== 'missing' ? game.value.roster : []).map((p) => [p.playerId, p])));
@@ -34,7 +36,7 @@ export const box = computed(() => boxScore(events.value));
 export const units = computed(() => lineups(events.value));
 export const splits = computed(() => onOff(events.value));
 export const shots = computed(() => shotChart(events.value));
-export const plays = computed(() => playByPlay(events.value, who).reverse());
+export const plays = computed(() => playByPlay(events.value, who, game.value && game.value !== 'missing' ? game.value.teams : undefined).reverse());
 
 /** Load a game by its public slug and follow it live. Read-only: viewers never write. */
 export async function open(slug: string) {
@@ -54,11 +56,17 @@ export async function open(slug: string) {
   const refresh = () => {
     events.value = sync.log.events.slice(); // GameLog mutates one array; a new one notifies signals
     state.value = sync.log.state;
-    online.value = sync.online;
+    setOnline(sync.online);
   };
+  // The realtime socket notices a dead network late (heartbeat); the browser's own signal is instant.
+  const setOnline = (o: boolean) => {
+    online.value = o && navigator.onLine;
+    if (online.value) everOnline.value = true;
+  };
+  addEventListener('offline', () => setOnline(false));
   sync.onChange = refresh;
   setInterval(() => {
-    online.value = sync.online;
+    setOnline(sync.online);
     if (state.value.clock.running) now.value = sync.now();
   }, 200);
   game.value = g;

@@ -60,6 +60,8 @@ export function guessMapping(headers: string[]): Mapping {
     else if (m.team === null && /team|club/.test(h)) m.team = i;
     else if (m.name === null && /name|player/.test(h)) m.name = i;
   });
+  // "Name, Surname": the plain name column is the first name.
+  if (m.name !== null && m.last !== null && m.first === null) return { ...m, first: m.name, name: null };
   return m;
 }
 
@@ -84,7 +86,7 @@ export interface ImportPlan {
 export function planImport(
   rows: string[][],
   m: Mapping,
-  ctx: { teams: { id: string; name: string }[]; players: { team_id: string; name: string }[]; targetTeam?: string },
+  ctx: { teams: { id: string; name: string }[]; players: { team_id: string; name: string; default_jersey?: string | null }[]; targetTeam?: string },
 ): ImportPlan {
   const key = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
   const byName = new Map(ctx.teams.map((t) => [key(t.name), t]));
@@ -96,7 +98,7 @@ export function planImport(
 
   const out = rows.map((r): PlanRow => {
     const name = (m.name !== null ? cell(r, m.name) : [cell(r, m.first), cell(r, m.last)].filter(Boolean).join(' ')).replace(/\s+/g, ' ');
-    const jerseyRaw = cell(r, m.jersey);
+    const jerseyRaw = cell(r, m.jersey).replace(/^#\s*/, '');
     const teamRaw = m.team !== null ? cell(r, m.team) : (target?.name ?? '');
     const existing = teamRaw ? byName.get(key(teamRaw)) : undefined;
     const team = existing?.name ?? teamRaw;
@@ -113,6 +115,8 @@ export function planImport(
     if (jerseyRaw) {
       const shirt = `${key(team)}|${jerseyRaw}`;
       if (jerseys.has(shirt)) return fail(`jersey ${jerseyRaw} is already used on ${team} in this file`);
+      const holder = existing && ctx.players.find((p) => p.team_id === existing.id && p.default_jersey === jerseyRaw);
+      if (holder) return fail(`#${jerseyRaw} is already ${holder.name}'s number on ${team}`);
       jerseys.add(shirt);
     }
     if (!existing && !newTeams.has(key(team))) newTeams.set(key(team), team);

@@ -13,7 +13,7 @@ describe('playByPlay', () => {
       'A1 3PT made, assist A2',
       'B1 2PT missed, blocked by A3',
       'A4 defensive rebound',
-      'A2 turnover (badPass), steal B2',
+      'A2 turnover (bad pass), steal B2',
       'B3 shooting foul on A1, 2 FT',
       'A1 FT 1/2 made',
       'Sub A: out A5; in A6',
@@ -33,6 +33,12 @@ describe('playByPlay', () => {
 describe('describe', () => {
   test('coach foul', () => {
     const e = { type: 'foul', payload: { team: 'B', offender: 'coach', kind: 'technical', freeThrows: 1 } } as never;
-    expect(text(e, who)).toBe('coach B technical foul, 1 FT');
+    expect(text(e, who)).toBe('B coach technical foul, 1 FT');
+  });
+
+  test('team names when given', () => {
+    const teams = { A: 'Lions', B: 'Tigers' };
+    expect(text({ type: 'timeout', payload: { team: 'B' } } as never, who, teams)).toBe('Timeout Tigers');
+    expect(text({ type: 'foul', payload: { team: 'A', offender: 'bench', kind: 'technical', freeThrows: 1 } } as never, who, teams)).toBe('Lions bench technical foul, 1 FT');
   });
 });

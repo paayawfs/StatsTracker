@@ -55,6 +55,10 @@ describe('seasonTotals', () => {
     const live = seasonTotals([{ gameId: 'g3', teams: { A: 'lions', B: 'tigers' }, events: game1().slice(0, 3) }]);
     expect(live.teams.find((x) => x.teamId === 'lions')).toMatchObject({ gp: 1, wins: 0, losses: 0, pts: 3 });
   });
+
+  test('scheduled games that never started are not counted', () => {
+    expect(seasonTotals([{ gameId: 'g4', teams: { A: 'lions', B: 'tigers' }, events: [] }]).teams).toEqual([]);
+  });
 });
 
 describe('eventsCsv', () => {

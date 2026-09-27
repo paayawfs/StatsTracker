@@ -63,8 +63,47 @@ export function parsePlayers(text: string): { name: string; default_jersey: stri
       return m ? { name: m[2]!.trim(), default_jersey: m[1]! } : { name: l, default_jersey: null };
     });
 }
-export const addPlayers = async (team: string, rows: { name: string; default_jersey: string | null }[]) =>
-  must(await db.from('players').insert(rows.map((r) => ({ team_id: team, ...r }))).select());
+/** Why these new players can't join a team that already has `existing`, or null. */
+export function newPlayersProblem(rows: { name: string; default_jersey: string | null }[], existing: { name: string; default_jersey: string | null }[]): string | null {
+  const key = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+  const names = new Set(existing.map((p) => key(p.name)));
+  const shirts = new Map(existing.filter((p) => p.default_jersey).map((p) => [p.default_jersey!, p.name]));
+  for (const r of rows) {
+    if (names.has(key(r.name))) return `${r.name} is already on this team.`;
+    names.add(key(r.name));
+    if (r.default_jersey) {
+      const holder = shirts.get(r.default_jersey);
+      if (holder) return `#${r.default_jersey} is already ${holder}'s number.`;
+      shirts.set(r.default_jersey, r.name);
+    }
+  }
+  return null;
+}
+
+export async function addPlayers(team: string, rows: { name: string; default_jersey: string | null }[]) {
+  const problem = newPlayersProblem(rows, await players([team]));
+  if (problem) throw new Error(problem);
+  return must(await db.from('players').insert(rows.map((r) => ({ team_id: team, ...r }))).select());
+}
+
+/** Fill missing and clashing jerseys (a clash keeps the first player's number) with the next free one. */
+export function fillJerseys<T extends { team: string; jersey: string | null }>(roster: T[]): (T & { jersey: string })[] {
+  for (const t of new Set(roster.map((r) => r.team))) {
+    const used = new Set<string>();
+    const needs: T[] = [];
+    for (const r of roster.filter((x) => x.team === t)) {
+      if (r.jersey && !used.has(r.jersey)) used.add(r.jersey);
+      else needs.push(r);
+    }
+    let next = 0;
+    for (const r of needs) {
+      while (used.has(String(next))) next++;
+      r.jersey = String(next);
+      used.add(r.jersey);
+    }
+  }
+  return roster as (T & { jersey: string })[];
+}
 
 export const ruleSets = async (league: string) => must(await db.from('rule_sets').select('id, name, rules').eq('league_id', league).order('name')) as RuleSetRow[];
 export async function saveRuleSet(league: string, rules: RuleSet, id?: string) {
@@ -82,22 +121,19 @@ export const games = async (league: string) =>
 export async function createGame(league: string, g: { team_a: string; team_b: string; season_id: string | null; rule_set_id: string; mode: 'single' | 'multi'; shot_locations: boolean; scheduled_at: string | null }) {
   if (g.team_a === g.team_b) throw new Error('Pick two different teams.');
   const game = must(await db.from('games').insert({ league_id: league, ...g }).select('id').single()) as { id: string };
-  const roster = (await players([g.team_a, g.team_b])).map((p) => ({ game_id: game.id, player_id: p.id, team: p.team_id === g.team_a ? 'A' : 'B', jersey: p.default_jersey }));
-  for (const t of ['A', 'B']) {
-    const used = new Set(roster.filter((r) => r.team === t && r.jersey).map((r) => r.jersey));
-    let next = 0;
-    for (const r of roster.filter((x) => x.team === t && !x.jersey)) {
-      while (used.has(String(next))) next++;
-      r.jersey = String(next);
-      used.add(r.jersey);
-    }
-  }
+  const roster = fillJerseys((await players([g.team_a, g.team_b])).map((p) => ({ game_id: game.id, player_id: p.id, team: p.team_id === g.team_a ? 'A' : 'B', jersey: p.default_jersey })));
   if (roster.length) must(await db.from('game_roster').insert(roster).select());
   return game.id;
 }
 
 export const gameRoster = async (game: string) => must(await db.from('game_roster').select('player_id, team, jersey').eq('game_id', game)) as RosterRow[];
-export const setJersey = async (game: string, player: string, jersey: string) => must(await db.from('game_roster').update({ jersey }).eq('game_id', game).eq('player_id', player).select());
+export async function setJersey(game: string, player: string, jersey: string) {
+  if (!/^\d{1,2}$/.test(jersey)) throw new Error('A jersey is 0-99 or 00.');
+  const roster = await gameRoster(game);
+  const team = roster.find((r) => r.player_id === player)?.team;
+  if (roster.some((r) => r.team === team && r.player_id !== player && r.jersey === jersey)) throw new Error(`#${jersey} is already taken on this team.`);
+  return must(await db.from('game_roster').update({ jersey }).eq('game_id', game).eq('player_id', player).select());
+}
 
 export interface CodeRow { code: string; expires_at: string; revoked_at: string | null }
 export const codes = async (game: string) => must(await db.from('game_codes').select('code, expires_at, revoked_at').eq('game_id', game).order('created_at', { ascending: false })) as CodeRow[];

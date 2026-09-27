@@ -144,6 +144,14 @@ describe('fouls', () => {
     expect(r.state.freeThrowQueue).toEqual([{ team: 'A', shooter: 'a1', next: 1, of: 2 }]);
   });
 
+  test('personal foul in the bonus with "who was fouled" skipped: free throws still queued', () => {
+    const foul = [p('b2'), { kind: 'foul' }, { kind: 'foulKind', value: 'personal' }, { kind: 'skip' }] as Input[];
+    const r = run(...foul, ...foul, ...foul, ...foul, ...foul);
+    expect(r.state.freeThrowQueue).toEqual([{ team: 'A', shooter: null, next: 1, of: 2 }]);
+    const ft = run(p('a3'), { kind: 'ft', made: true }, { kind: 'ft', made: true });
+    expect(ft.emitted.map((e) => e.payload)).toMatchObject([{ shooter: 'a3', attempt: 1 }, { shooter: 'a3', attempt: 2 }]);
+  });
+
   test('shooting foul asks for the count', () => {
     const r = run(p('b1'), { kind: 'foul' }, { kind: 'foulKind', value: 'shooting' }, p('a3'), { kind: 'ftCount', n: 3 });
     expect(r.emitted[0]).toMatchObject({ payload: { kind: 'shooting', fouled: 'a3', freeThrows: 3 } });
@@ -161,7 +169,7 @@ describe('fouls', () => {
   test('player technical: rule-set free throws, no fouled player', () => {
     const r = run(p('a1'), { kind: 'foul' }, { kind: 'foulKind', value: 'technical' });
     expect(r.emitted[0]).toMatchObject({ payload: { kind: 'technical', freeThrows: 1 } });
-    expect(r.state.freeThrowQueue).toEqual([{ team: 'B', shooter: null, next: 1, of: 1 }]);
+    expect(r.state.freeThrowQueue).toEqual([{ team: 'B', shooter: null, next: 1, of: 1, deadBall: true }]);
   });
 
   test('coach technical', () => {
@@ -185,6 +193,11 @@ describe('free throws', () => {
   test('missed last free throw prompts for the rebound', () => {
     const r = run(...shootingFoul, { kind: 'ft', made: true }, { kind: 'ft', made: false });
     expect(r.entry).toMatchObject({ step: 'rebound', shooterTeam: 'A' });
+  });
+
+  test('missed technical free throw: no rebound prompt', () => {
+    const tech = [p('a1'), { kind: 'foul' }, { kind: 'foulKind', value: 'technical' }] as Input[];
+    expect(run(...tech, p('b2'), { kind: 'ft', made: false }).entry).toEqual(idle);
   });
 
   test('technical free throw needs a shooter picked first', () => {
@@ -215,6 +228,13 @@ describe('substitution', () => {
   test('skip cancels without emitting', () => {
     expect(run(p('a1'), { kind: 'sub' }, p('a6'), { kind: 'skip' }).emitted).toEqual([]);
   });
+
+  test('confirm needs as many in as out', () => {
+    const r = run(p('a1'), { kind: 'sub' }, { kind: 'confirm' });
+    expect(r.emitted).toEqual([]);
+    expect(r.entry).toMatchObject({ step: 'sub', out: ['a1'], in: [] });
+    expect(run(p('a1'), { kind: 'sub' }, p('a2'), p('a6'), { kind: 'confirm' }).emitted).toEqual([]);
+  });
 });
 
 describe('selection', () => {
@@ -232,6 +252,11 @@ describe('selection', () => {
 describe('team actions', () => {
   test('timeout', () => {
     expect(bodies(run({ kind: 'timeout', team: 'B' }).emitted)).toEqual([{ type: 'timeout', payload: { team: 'B' } }]);
+  });
+
+  test('timeout stops a running clock first', () => {
+    log.push(stamp({ type: 'clockStart', payload: {} }));
+    expect(run({ kind: 'timeout', team: 'B' }).emitted.map((e) => e.type)).toEqual(['clockStop', 'timeout']);
   });
 });
 

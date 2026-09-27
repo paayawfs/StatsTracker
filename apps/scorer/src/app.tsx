@@ -1,5 +1,5 @@
 import { useComputed, useSignal } from '@preact/signals';
-import { describe as describeEvent, formatClock, FOUL_KINDS, remaining, shotZone, teamFoulCount, timeoutsAllowed, ZONES, type GameEvent, type Role, type Team } from '@stats/core';
+import { describe as describeEvent, formatClock, FOUL_KINDS, remaining, shotZone, teamFoulCount, timeoutsAllowed, ZONES, type EventOf, type GameEvent, type Role, type Team } from '@stats/core';
 import { Avatar, Court, snapToSection, toScreen } from '@stats/ui';
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
@@ -30,6 +30,7 @@ export function App() {
   if (!ready.value) return null;
   if (!info.value) return <Join />;
   if (info.value.mode === 'multi' && !myRoles.value.length) return <RolePicker />;
+  if (info.value.mode === 'single' && !myRoles.value.length && state.value.roles.single) return <TakeOverScoring />;
   if (state.value.phase === 'pregame') return <Pregame />;
   return <Live />;
 }
@@ -47,7 +48,7 @@ function Join() {
     try {
       await join(code.value);
     } catch (err) {
-      error.value = err instanceof Error ? err.message : String(err);
+      error.value = !navigator.onLine || (err instanceof TypeError && /fetch/i.test(err.message)) ? 'No connection. Joining needs internet once; after that scoring works offline.' : err instanceof Error ? err.message : String(err);
     } finally {
       busy.value = false;
     }
@@ -57,7 +58,7 @@ function Join() {
       <p class="eyebrow">Scorer</p>
       <h1>Join a game</h1>
       <label for="code">Game code</label>
-      <input id="code" class="code-input" value={code.value} onInput={(e) => (code.value = e.currentTarget.value.toUpperCase())} autoFocus autocomplete="off" maxLength={8} placeholder="8 letters" />
+      <input id="code" class="code-input" value={code.value} onInput={(e) => (code.value = e.currentTarget.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8))} autoFocus autocomplete="off" placeholder="8 characters" />
       <button class="primary big" disabled={busy.value || code.value.length < 8}>{busy.value ? 'Joining…' : 'Join game'}</button>
       {error.value && <p class="error">{error.value}</p>}
       <p class="small">The league admin gives you the code. No account needed.</p>
@@ -99,7 +100,7 @@ function Pregame() {
                 return (
                   <button key={p.id} class={on ? 'starter on' : 'starter'} onClick={() => toggle(p)} data-testid={`starter-${p.jersey}-${t}`} aria-pressed={on}>
                     <Avatar name={p.name} photo={p.photo} team={t} size={40} />
-                    <b class="jersey">{p.jersey}</b>
+                    <b class="num">{p.jersey}</b>
                     <span class="pname">{p.name}</span>
                     {on && <i class="check" aria-hidden="true">✓</i>}
                   </button>
@@ -184,7 +185,7 @@ function ClockAdjust() {
   const apply = () => {
     const [m, s] = value.value.includes(':') ? value.value.split(':') : ['0', value.value];
     const ms = Math.round((Number(m) * 60 + Number(s)) * 1000);
-    if (Number.isFinite(ms) && ms >= 0) setClock(ms);
+    if (value.value.trim() && Number.isFinite(ms) && ms >= 0) setClock(ms);
     open.value = false;
   };
   return (
@@ -290,7 +291,7 @@ function Stage() {
       const team = state.value.roster[e.player];
       hint =
         team && !can.value.team(team) ? (
-          <>{who(e.player)} · {gi.teams[team]}'s device records their actions. Here: block, steal or assist.</>
+          <>{who(e.player)} · scored on the {gi.teams[team]} phone. Here: BLK, STL or AST.</>
         ) : gi.shotLocations ? (
           <>{who(e.player)} · tap the section of the shot</>
         ) : (
@@ -346,12 +347,13 @@ function Stage() {
         <div class="card sub-card">
           <p class="card-title">Substitution · {gi.teams[e.team]}</p>
           <p class="small">Tap players going out and coming in, in the {gi.teams[e.team]} rail.</p>
+          {e.out.length !== e.in.length && <p class="small">{e.out.length} out, {e.in.length} in: pick as many coming in as going out.</p>}
           <div class="sub-lists">
             <div><span class="eyebrow">Out</span>{e.out.map((id) => <p key={id}>{who(id)}</p>)}</div>
             <div><span class="eyebrow">In</span>{e.in.map((id) => <p key={id}>{who(id)}</p>)}</div>
           </div>
           <div class="row">
-            <button class="primary" {...send({ kind: 'confirm' })}>Confirm</button>
+            <button class="primary" disabled={!e.out.length || e.out.length !== e.in.length} {...send({ kind: 'confirm' })}>Confirm</button>
             <button {...send({ kind: 'skip' })}>Cancel</button>
           </div>
         </div>
@@ -444,7 +446,7 @@ function Picker({ title, children, cols = 3 }: { title: string; children: Compon
   return (
     <div class="card picker">
       <p class="card-title">{title}</p>
-      <div class="picker-grid" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+      <div class="picker-grid" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
         {children}
       </div>
     </div>
@@ -470,7 +472,7 @@ function FreeThrows() {
           </>
         ) : (
           <>
-            <b>Technical FT</b>: tap the {team} shooter
+            <b>FT {due.next}/{due.of}</b>: tap the {team} shooter
           </>
         )}
       </span>
@@ -543,7 +545,11 @@ function Menu({ close, open }: { close: () => void; open: (p: 'log' | 'roles') =
         {control && item(`Jump won ${gi.teams.A}`, () => jump('A'))}
         {control && item(`Jump won ${gi.teams.B}`, () => jump('B'))}
         {item('Keyboard shortcuts', () => (showHelp.value = true))}
-        {item('Leave game', leave, 'leave')}
+        {item('Leave game', () => {
+          const n = pending.value;
+          // ponytail: native confirm; unsynced events stay on this device and sync when it rejoins.
+          if (!n || confirm(`${n} event${n > 1 ? 's' : ''} not synced yet. They stay on this phone and sync when you rejoin this game. Leave anyway?`)) leave();
+        }, 'leave')}
       </div>
     </div>
   );
@@ -627,7 +633,7 @@ function PlayByPlay() {
           <button onClick={() => correct({ targetId: e.id, body: { type: 'shot', payload: { ...e.payload, made: !e.payload.made, ...(e.payload.made ? { assist: undefined } : { block: undefined }) } } }, 'amend')}>
             {e.payload.made ? 'Mark missed' : 'Mark made'}
           </button>
-          <button onClick={() => correct({ targetId: e.id, body: { type: 'shot', payload: { ...e.payload, value: e.payload.value === 2 ? 3 : 2 } } }, 'amend')}>
+          <button onClick={() => correct({ targetId: e.id, body: { type: 'shot', payload: { ...withoutSpot(e.payload), value: e.payload.value === 2 ? 3 : 2 } } }, 'amend')}>
             Make it {e.payload.value === 2 ? 3 : 2}PT
           </button>
         </>
@@ -670,7 +676,10 @@ const describe = (e: GameEvent, players: Map<string, Player>) =>
   describeEvent(e, (id) => {
     const p = id ? players.get(id) : undefined;
     return p ? `#${p.jersey} ${p.name}` : 'team';
-  });
+  }, info.value?.teams);
+
+/** A 2 made into a 3 can't keep a spot inside the arc (it would count as a 3 in the paint). */
+const withoutSpot = ({ x: _x, y: _y, ...rest }: EventOf<'shot'>['payload']) => rest;
 
 const median = (xs: number[]) => (xs.length ? Math.round([...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]!) : '-');
 
@@ -734,6 +743,19 @@ function Roles() {
         );
       })}
       {!stopped && <p class="small">Take-overs happen at a stoppage: stop the clock first.</p>}
+    </div>
+  );
+}
+
+/** Single mode, joined on a second phone (e.g. the first one died): take over the scoring. */
+function TakeOverScoring() {
+  return (
+    <div class="sheet">
+      <p class="eyebrow">{info.value!.teams.A} v {info.value!.teams.B}</p>
+      <h1>Another phone is scoring this game</h1>
+      <p>If that phone died or you're replacing it, take over. It stops being able to score, and everything recorded so far stays.</p>
+      <button class="primary big" onClick={() => takeOver('single')} data-testid="take-over-scoring">Take over scoring</button>
+      <button onClick={leave}>Leave game</button>
     </div>
   );
 }

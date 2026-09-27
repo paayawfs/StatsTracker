@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { NBA } from '../../../packages/core/src/rules';
-import { btn, createGame, joinAndStart, player, serverEvents, menu } from './fixtures';
+import { btn, createGame, joinAndStart, joinCode, player, serverEvents, menu } from './fixtures';
 
 test('a full single-mode sequence: shots, assist, rebound, foul + free throws, sub, undo, period end', async ({ page }) => {
   const g = await createGame();
@@ -104,7 +104,7 @@ test('technical foul free throw: pick the shooter first, then Made works', async
   await joinAndStart(page, g.code);
   await btn(page, 'Coach T').first().click(); // Lions coach technical -> 1 FT for the Tigers
   const made = page.getByTestId('ft-made');
-  await expect(page.getByText('Technical FT: tap the Tigers shooter')).toBeVisible();
+  await expect(page.getByText('FT 1/1: tap the Tigers shooter')).toBeVisible();
   await expect(made).toBeDisabled();
   await player(page, 'B', 7).click();
   await expect(page.getByText('FT 1/1 · #7 Tiger 7')).toBeVisible();
@@ -141,4 +141,23 @@ test('leave game: back to the join screen, rejoining picks up where it was', asy
   await page.getByLabel('Game code').fill(g.code);
   await page.getByRole('button', { name: 'Join game' }).click();
   await expect(page.getByTestId('score-A')).toHaveText('2');
+});
+
+test('a replacement phone takes over scoring from one that died', async ({ page, browser }) => {
+  const g = await createGame();
+  await joinAndStart(page, g.code);
+  await player(page, 'A', 4).click();
+  await btn(page, '2 ✓').click();
+  await btn(page, 'Skip').click();
+
+  const context = await browser.newContext({ viewport: { width: 844, height: 390 }, hasTouch: true });
+  const spare = await context.newPage();
+  await joinCode(spare, g.code);
+  await spare.getByTestId('take-over-scoring').click();
+  await expect(spare.getByTestId('score-A')).toHaveText('2');
+  await player(spare, 'B', 4).click();
+  await btn(spare, '3 ✓').click();
+  await btn(spare, 'Skip').click();
+  await expect.poll(async () => (await serverEvents(g.slug)).filter((e) => e.type === 'shot').length).toBe(2);
+  await context.close();
 });

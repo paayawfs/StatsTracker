@@ -40,7 +40,7 @@ export async function serverEvents(slug: string) {
   return must(await viewer.rpc('public_events', { slug, after_seq: 0 })) as { type: string; payload: Record<string, unknown> }[];
 }
 
-async function joinCode(page: Page, code: string) {
+export async function joinCode(page: Page, code: string) {
   await page.goto('/');
   await page.getByLabel('Game code').fill(code);
   await page.getByRole('button', { name: 'Join game' }).click();

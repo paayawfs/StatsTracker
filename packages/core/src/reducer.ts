@@ -14,6 +14,8 @@ export interface FreeThrowDue {
   shooter: string | null;
   next: number;
   of: number;
+  /** Technical, unsportsmanlike or disqualifying: no rebound after the last one. */
+  deadBall?: true;
 }
 
 export interface GameState {
@@ -129,10 +131,11 @@ export function apply(state: GameState, e: GameEvent): GameState {
       if (made && team && r) s.score[team] += r.points.freeThrow;
       const due = s.freeThrowQueue.find((d) => d.team === team && (d.shooter === null || d.shooter === shooter));
       if (due) {
+        due.shooter ??= shooter; // whoever takes the first free throw of a set shoots the rest
         due.next = attempt + 1;
         if (due.next > due.of) s.freeThrowQueue.splice(s.freeThrowQueue.indexOf(due), 1);
       }
-      s.reboundable = !made && attempt === of;
+      s.reboundable = !made && attempt === of && !due?.deadBall;
       break;
     }
     case 'rebound':
@@ -145,7 +148,8 @@ export function apply(state: GameState, e: GameEvent): GameState {
         bump(s.personalFouls, player);
         if (r?.teamFoulKinds.includes(kind)) bump(s.teamFouls[team], s.period);
       }
-      if (freeThrows > 0) s.freeThrowQueue.push({ team: other(team), shooter: fouled ?? null, next: 1, of: freeThrows });
+      const deadBall = kind === 'technical' || kind === 'unsportsmanlike' || kind === 'disqualifying';
+      if (freeThrows > 0) s.freeThrowQueue.push({ team: other(team), shooter: fouled ?? null, next: 1, of: freeThrows, ...(deadBall ? { deadBall: true as const } : {}) });
       break;
     }
     case 'roleClaim':

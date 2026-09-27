@@ -1134,3 +1134,49 @@ players as jersey chips in two side rails, one bottom dock for everything else.
 ## Leave game (2026-09-27)
 
 - The scorer resumes the last game on the device (`scorer.game` in localStorage) and had no way out, so a device that once joined a multi-device game as Team A stayed on it. Menu → **Leave game** calls the existing `leave()`: closes sync, forgets the game, back to the join screen. Events stay in IndexedDB and on the server, so rejoining with the code picks up where it was (e2e).
+
+## QA sweep: four agents (2026-09-28)
+
+Four parallel agents: scorer single-mode at 9 landscape sizes + portrait, multi-device/join/offline/admin,
+viewer at 9 sizes, and a code review that proved bugs with throwaway tests. Fixed:
+
+- **Sync.** Peers' unconfirmed fast-path events live in memory only and are dropped if not durable
+  `PEER_GRACE_MS` (30 s) after a catch-up, so a refused event whose discard was missed can't linger
+  forever. Other devices' refused events aren't loaded as this device's. A `discard` only removes an
+  unconfirmed peer event (not own or durable ones). A durable event the client can't parse still fills
+  its seq, so catch-up doesn't refetch the whole tail forever.
+- **Roles.** `GameLog.state.roles` is refolded in write order (seq, wallClock), like the server decides
+  them; in game-clock order a release and a claim a moment later swapped on skewed device clocks.
+- **DB (`20260928120000_qa_hardening`).** join_game: a device rejoining under a new anonymous user takes
+  over its seat and roles (was a unique-violation). amend/void can't target role/lock events or other
+  corrections (clients and `role_claims` disagreed). pgTAP `10_qa_hardening`.
+- **Scorer.** Single mode: a replacement phone gets "Take over scoring". Leave game clears timers
+  (the old 100 ms interval made the online badge flicker) and resets entry/notice/etc.; confirms if
+  events are unsynced. Undo after a reload no longer undoes the previous undo (undone ids persisted per
+  game). Releasing your own role isn't reported as a take-over; claiming clears the notice. Join code
+  input strips dashes/spaces; offline join says so. Online badge also follows `navigator.onLine`.
+- **Scoring logic.** Bonus free throws are queued even when "who was fouled" is skipped. An open FT set
+  (no named shooter) sticks to whoever shoots the first one (was: asked again per attempt). Subs need as
+  many in as out. Dead-ball FTs (technical/unsportsmanlike/disqualifying) have no rebound prompt. A
+  timeout stops a running clock. "Make it 3PT/2PT" drops the spot; points in the paint counts 2s only.
+  Clock "set" with an empty field does nothing.
+- **Layout.** The "No spot" bar moved from the baseline (it covered the restricted area on phones) to
+  half court. The menu scrolls when taller than the screen. Team REB gets its own row so the other team
+  buttons don't shift. Bigger team-button targets. Starter jersey no longer overlaps names (admin
+  `.jersey` rule leaked); Start game is sticky. Foul picker fits 568 px.
+- **Viewer.** Box score on phones showed no stats (the sticky name cell was as wide as the screen):
+  name column capped, avatars hidden on phones. Every table sits in its own scroll box. /40 rates need
+  2 minutes. OT periods say OT1. Play-by-play uses team names and readable turnover kinds (core
+  `describe(e, who, teams)`). Page title carries the score. "connecting…" before the first connection.
+  URLs with a trailing slash or upper-case slug work.
+- **Admin.** Duplicate names/jerseys on a team are refused (paste and CSV); game rosters fix clashing
+  default jerseys; per-game jersey edits are validated. CSV "Name, Surname" maps Name to first name;
+  "#9" is jersey 9. Long viewer links wrap on phones.
+- New e2e: `small-phone.spec` (568x320 rim tap + menu), viewer `responsive.spec` (320/390, no tab wider
+  than the screen, PTS visible), single-mode take-over.
+
+Not done yet (reported, lower priority): admin rename/delete and browser Back (nav lives in signals);
+rule-set validation messages without field names; BLK from the rebound prompt; undo per action (a made
+shot + assist needs two undos); free throws owed at the buzzer; viewer offline reload (no service
+worker); IndexedDB pruning; sub overlay covering bench chips at 1180 with 12-man rosters; "Last, First"
+names (question open).

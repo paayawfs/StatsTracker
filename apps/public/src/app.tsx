@@ -3,12 +3,12 @@ import { formatClock, remaining, ZONES, type ShotZone, type Split, type Team, ty
 import { Avatar, Court } from '@stats/ui';
 import { useEffect } from 'preact/hooks';
 import { heat, minutes, pct, signed } from './format';
-import { box, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
+import { box, everOnline, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
 
 type Tab = 'box' | 'plays' | 'lineups' | 'onoff' | 'shots';
 
 export function App() {
-  const slug = location.pathname.match(/^\/g\/([0-9a-f]{32})$/)?.[1];
+  const slug = location.pathname.match(/^\/g\/([0-9a-f]{32})\/?$/i)?.[1]?.toLowerCase();
   useEffect(() => {
     if (slug) void open(slug);
   }, [slug]);
@@ -47,9 +47,18 @@ function Game({ g }: { g: PublicGame }) {
   );
 }
 
+/** "P2", or "OT1" past regulation. */
+const periodName = (period: number) => {
+  const regulation = state.value.rules?.periods ?? 4;
+  return period > regulation ? `OT${period - regulation}` : `P${period}`;
+};
+
 function Header({ g }: { g: PublicGame }) {
   const st = state.value;
-  const status = st.phase === 'final' || g.locked ? 'FINAL' : st.phase === 'pregame' ? 'Starts soon' : st.phase === 'break' ? `End of P${st.period}` : `P${st.period}`;
+  const status = st.phase === 'final' || g.locked ? 'FINAL' : st.phase === 'pregame' ? 'Starts soon' : st.phase === 'break' ? `End of ${periodName(st.period)}` : periodName(st.period);
+  useEffect(() => {
+    document.title = st.phase === 'pregame' ? `${g.teams.A} v ${g.teams.B}` : `${g.teams.A} ${st.score.A}-${st.score.B} ${g.teams.B} · ${status}`;
+  }, [st.score.A, st.score.B, status]);
   return (
     <header class="board">
       <div class="team team-A">
@@ -59,7 +68,7 @@ function Header({ g }: { g: PublicGame }) {
       <div class="status">
         <span class="clock">{st.phase === 'live' ? formatClock(remaining(st.clock, now.value)) : ''}</span>
         <span>{status}</span>
-        {st.phase !== 'final' && <span class={online.value ? 'live' : 'stale'}>{online.value ? '● LIVE' : 'reconnecting…'}</span>}
+        {st.phase !== 'final' && <span class={online.value ? 'live' : 'stale'}>{online.value ? '● LIVE' : everOnline.value ? 'reconnecting…' : 'connecting…'}</span>}
       </div>
       <div class="team team-B">
         <span>{g.teams.B}</span>
@@ -97,7 +106,7 @@ function BoxTable({ g, team }: { g: PublicGame; team: Team }) {
                   <td class="name">
                     <span class="who">
                       <Avatar name={r?.name ?? ''} photo={r?.photo} team={team} size={24} />
-                      <b>{r?.jersey}</b> {r?.name}
+                      <b>{r?.jersey}</b> <span class="pn">{r?.name}</span>
                     </span>
                   </td>
                   <td>{minutes(p.min)}</td>
@@ -158,9 +167,9 @@ function Plays({ g }: { g: PublicGame }) {
       {plays.value.map((r) => (
         <li key={r.event.id} class={r.scored ? `scored team-${r.scored}` : ''}>
           <span class="t">
-            P{r.event.period} {formatClock(r.event.gameClock)}
+            {periodName(r.event.period)} {r.event.type === 'periodEnd' ? 'end' : formatClock(r.event.gameClock)}
           </span>
-          <span class="text">{r.text.replace(/\bSub A\b/, `Sub ${g.teams.A}`).replace(/\bSub B\b/, `Sub ${g.teams.B}`)}</span>
+          <span class="text">{r.text}</span>
           <span class="s">
             {r.score.A}-{r.score.B}
           </span>
@@ -171,12 +180,15 @@ function Plays({ g }: { g: PublicGame }) {
 }
 
 const jerseys = (g: PublicGame, ids: string[]) => ids.map((id) => g.roster.find((p) => p.playerId === id)?.jersey ?? '?').join(' · ');
-const rate = (s: Split) => signed(s.per40, 1);
+/** Per-40 rates on a few seconds of play are noise (+5000): shown from 2 minutes. */
+const MIN_FOR_RATE = 2 * 60_000;
+const rate = (s: Split) => (s.min >= MIN_FOR_RATE ? signed(s.per40, 1) : '-');
 
 function Lineups({ g, team }: { g: PublicGame; team: Team }) {
   return (
     <section>
       <h2>{g.teams[team]} lineups</h2>
+      <div class="scroll">
       <table>
         <thead>
           <tr>
@@ -201,6 +213,7 @@ function Lineups({ g, team }: { g: PublicGame; team: Team }) {
           ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }
@@ -209,6 +222,7 @@ function OnOff({ g, team }: { g: PublicGame; team: Team }) {
   return (
     <section>
       <h2>{g.teams[team]} on/off</h2>
+      <div class="scroll">
       <table>
         <thead>
           <tr>
@@ -230,11 +244,12 @@ function OnOff({ g, team }: { g: PublicGame; team: Team }) {
                 <td>{signed(p.on.plusMinus)}</td>
                 <td>{minutes(p.off.min)}</td>
                 <td>{signed(p.off.plusMinus)}</td>
-                <td>{p.on.per40 !== null && p.off.per40 !== null ? signed(p.on.per40 - p.off.per40, 1) : '-'}</td>
+                <td>{p.on.per40 !== null && p.off.per40 !== null && p.on.min >= MIN_FOR_RATE && p.off.min >= MIN_FOR_RATE ? signed(p.on.per40 - p.off.per40, 1) : '-'}</td>
               </tr>
             ))}
         </tbody>
       </table>
+      </div>
     </section>
   );
 }
@@ -271,6 +286,7 @@ function Shots({ g }: { g: PublicGame }) {
       </div>
       <div class="shots-layout">
         <Court id="viewer-court" testId="shot-chart" fills={fills} labels={labels} />
+        <div class="scroll">
         <table>
           <thead>
             <tr>
@@ -292,6 +308,7 @@ function Shots({ g }: { g: PublicGame }) {
             ))}
           </tbody>
         </table>
+        </div>
       </div>
       <p class="small">Numbers on the court are made/attempted per section; colour runs from cold (blue) to hot (orange), stronger with more attempts. Scorers record the section of each shot, not an exact spot.</p>
     </section>

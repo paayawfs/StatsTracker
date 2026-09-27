@@ -109,7 +109,8 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
     // Personal: free throws follow from the team-foul bonus.
     const r = state.rules;
     const threshold = r ? (state.period > r.periods ? r.teamFoulBonus.overtimeThreshold : r.teamFoulBonus.threshold) : Infinity;
-    const bonus = r && foul.fouled && teamFoulCount(state, foul.team) >= threshold ? r.teamFoulBonus.freeThrows : 0;
+    // In the bonus even if "who was fouled" was skipped: the FT bar then asks for the shooter.
+    const bonus = r && teamFoulCount(state, foul.team) >= threshold ? r.teamFoulBonus.freeThrows : 0;
     emit(foulBody({ ...foul, offender: 'player', freeThrows: bonus }));
     return done();
   };
@@ -122,6 +123,7 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
   switch (input.kind) {
     case 'timeout':
       if (!canControl) return done(entry);
+      if (state.clock.running) emit({ type: 'clockStop', payload: {} });
       emit({ type: 'timeout', payload: { team: input.team } });
       return done();
     case 'teamTurnover':
@@ -135,7 +137,7 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
       const shooter = due?.shooter ?? (selected && teamOf(selected) === due?.team ? selected : undefined);
       if (!due || !shooter || !canTeam(due.team)) return done(entry);
       emit({ type: 'freeThrow', payload: { shooter, made: input.made, attempt: due.next, of: due.of } });
-      return done(!input.made && due.next === due.of ? { step: 'rebound', shooterTeam: due.team } : idle);
+      return done(!input.made && due.next === due.of && !due.deadBall ? { step: 'rebound', shooterTeam: due.team } : idle);
     }
   }
 
@@ -207,10 +209,13 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
         const list = entry[key].includes(input.id) ? entry[key].filter((id) => id !== input.id) : [...entry[key], input.id];
         return done({ ...entry, [key]: list });
       }
-      if (input.kind === 'confirm' && entry.out.length + entry.in.length) {
+      if (input.kind === 'confirm') {
+        // Out and in must match, or a team plays with 4 or 6.
+        if (!entry.out.length || entry.out.length !== entry.in.length) return done(entry);
         emit({ type: 'substitution', payload: { team: entry.team, out: entry.out, in: entry.in } });
+        return done();
       }
-      return done(input.kind === 'confirm' || input.kind === 'skip' ? idle : entry);
+      return done(input.kind === 'skip' ? idle : entry);
   }
 
   // Selection and player-first actions.

@@ -35,6 +35,10 @@ describe('guessMapping', () => {
     expect(guessMapping(['First name', 'Surname', 'Jersey #', 'Team'])).toEqual({ name: null, first: 0, last: 1, jersey: 2, team: 3 });
     expect(guessMapping(['#', 'Full name'])).toEqual({ name: 1, first: null, last: null, jersey: 0, team: null });
   });
+  test('"Name" next to "Surname" is the first name', () => {
+    expect(guessMapping(['Name', 'Surname', 'Jersey #', 'Team'])).toEqual({ name: null, first: 0, last: 1, jersey: 2, team: 3 });
+  });
+
   test('unknown headers map to nothing', () => {
     expect(guessMapping(['Height', 'Position'])).toEqual({ name: null, first: null, last: null, jersey: null, team: null });
   });
@@ -84,6 +88,11 @@ describe('planImport', () => {
       ['add', undefined],
       ['skip', 'duplicate row'],
     ]);
+  });
+
+  test('"#9" is jersey 9; a jersey already on the team is flagged', () => {
+    const plan = planImport([['Esi', '#9'], ['Ama', '4']], { name: 0, first: null, last: null, jersey: 1, team: null }, { teams: existingTeams, players: [{ team_id: 't1', name: 'Kofi', default_jersey: '4' }], targetTeam: 't1' });
+    expect(plan.rows.map((r) => [r.jersey, r.status])).toEqual([['9', 'add'], ['4', 'error']]);
   });
 
   test('no name mapping at all: every row is an error', () => {

@@ -3,6 +3,8 @@ import { apply, initialState, type GameState } from './reducer';
 
 type Correction = EventOf<'amend' | 'void'>;
 
+const ROLE_EVENTS = new Set(['roleClaim', 'roleRelease', 'roleTransfer']);
+
 const byIdOrder = (a: GameEvent, b: GameEvent) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /** Canonical order: period asc, gameClock desc, seq asc (unconfirmed last), wallClock, id. */
@@ -33,9 +35,22 @@ export class GameLog {
   private readonly byId = new Map<string, GameEvent>();
   private readonly corrections = new Map<string, Correction[]>();
   private readonly locks: GameEvent[] = [];
+  private current: GameState | null = null;
 
+  /**
+   * State after the last event. Role holders are refolded in write order, as the server decides
+   * them: in game-clock order a release and a claim a moment later could swap on skewed clocks.
+   */
   get state(): GameState {
-    return this.states[this.states.length - 1] ?? initialState;
+    if (this.current) return this.current;
+    const s = this.states[this.states.length - 1] ?? initialState;
+    const roles: GameState['roles'] = {};
+    for (const e of this.events.filter((x) => ROLE_EVENTS.has(x.type)).sort(compareWrites)) {
+      if (e.type === 'roleClaim') roles[e.payload.role] ??= e.deviceId;
+      else if (e.type === 'roleRelease' && roles[e.payload.role] === e.deviceId) delete roles[e.payload.role];
+      else if (e.type === 'roleTransfer') roles[e.payload.role] = e.payload.toDeviceId;
+    }
+    return (this.current = { ...s, roles });
   }
 
   /** Returns the index replay started from, or -1 if the event changed nothing. */
@@ -145,6 +160,7 @@ export class GameLog {
   }
 
   private replayFrom(i: number) {
+    this.current = null;
     this.states.length = i;
     let s = this.states[i - 1] ?? initialState;
     for (let k = i; k < this.events.length; k++) this.states.push((s = apply(s, this.events[k]!)));

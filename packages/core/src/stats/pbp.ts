@@ -4,8 +4,10 @@ import { walk } from './walk';
 /** Name for a player id; undefined = a team-level action. */
 export type Who = (id?: string) => string;
 
-/** One line of play-by-play text. */
-export function describe(e: GameEvent, who: Who): string {
+const words = (camel: string) => camel.replace(/([A-Z])/g, ' $1').toLowerCase();
+
+/** One line of play-by-play text. `teams` names the sides (default "A" / "B"). */
+export function describe(e: GameEvent, who: Who, teams: Record<Team, string> = { A: 'A', B: 'B' }): string {
   switch (e.type) {
     case 'shot': {
       const p = e.payload;
@@ -19,18 +21,18 @@ export function describe(e: GameEvent, who: Who): string {
     case 'rebound':
       return `${who(e.payload.player)} ${e.payload.kind} rebound`;
     case 'turnover':
-      return `${who(e.payload.player)} turnover (${e.payload.kind})${e.payload.steal ? `, steal ${who(e.payload.steal)}` : ''}`;
+      return `${who(e.payload.player)} turnover (${words(e.payload.kind)})${e.payload.steal ? `, steal ${who(e.payload.steal)}` : ''}`;
     case 'foul': {
       const p = e.payload;
-      const by = p.offender === 'player' ? who(p.player) : `${p.offender} ${p.team}`;
+      const by = p.offender === 'player' ? who(p.player) : `${teams[p.team]} ${p.offender}`;
       return `${by} ${p.kind} foul${p.fouled ? ` on ${who(p.fouled)}` : ''}${p.freeThrows ? `, ${p.freeThrows} FT` : ''}`;
     }
     case 'substitution':
-      return `Sub ${e.payload.team}: out ${e.payload.out.map((id) => who(id)).join(', ') || '-'}; in ${e.payload.in.map((id) => who(id)).join(', ') || '-'}`;
+      return `Sub ${teams[e.payload.team]}: out ${e.payload.out.map((id) => who(id)).join(', ') || '-'}; in ${e.payload.in.map((id) => who(id)).join(', ') || '-'}`;
     case 'timeout':
-      return `Timeout ${e.payload.team}`;
+      return `Timeout ${teams[e.payload.team]}`;
     case 'jumpBall':
-      return `Jump ball won by ${e.payload.wonBy}`;
+      return `Jump ball won by ${teams[e.payload.wonBy]}`;
     case 'periodStart':
       return `Start of period ${e.period}`;
     case 'periodEnd':
@@ -44,7 +46,7 @@ export function describe(e: GameEvent, who: Who): string {
     case 'void':
       return 'Removed an event';
     default:
-      return e.type.replace(/([A-Z])/g, ' $1').toLowerCase();
+      return words(e.type);
   }
 }
 
@@ -61,12 +63,12 @@ export interface PlayRow {
 const HIDDEN = new Set(['gameStart', 'roleClaim', 'roleRelease', 'roleTransfer', 'amend', 'void', 'adminLock', 'checkpoint', 'clockStart', 'clockStop', 'possessionArrow']);
 
 /** Viewer play-by-play over the effective log, oldest first, with the running score. */
-export function playByPlay(events: readonly GameEvent[], who: Who): PlayRow[] {
+export function playByPlay(events: readonly GameEvent[], who: Who, teams?: Record<Team, string>): PlayRow[] {
   const rows: PlayRow[] = [];
   for (const { event, before, after } of walk(events)) {
     if (HIDDEN.has(event.type)) continue;
     const scored = after.score.A !== before.score.A ? 'A' : after.score.B !== before.score.B ? 'B' : undefined;
-    rows.push({ event, text: describe(event, who), score: { ...after.score }, ...(scored ? { scored } : {}) });
+    rows.push({ event, text: describe(event, who, teams), score: { ...after.score }, ...(scored ? { scored } : {}) });
   }
   return rows;
 }
