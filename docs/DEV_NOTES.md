@@ -1147,7 +1147,7 @@ viewer at 9 sizes, and a code review that proved bugs with throwaway tests. Fixe
   its seq, so catch-up doesn't refetch the whole tail forever.
 - **Roles.** `GameLog.state.roles` is refolded in write order (seq, wallClock), like the server decides
   them; in game-clock order a release and a claim a moment later swapped on skewed device clocks.
-- **DB (`20260928120000_qa_hardening`).** join_game: a device rejoining under a new anonymous user takes
+- **DB (`20260928120000_qa_hardening`, pushed to hosted 2026-09-30).** join_game: a device rejoining under a new anonymous user takes
   over its seat and roles (was a unique-violation). amend/void can't target role/lock events or other
   corrections (clients and `role_claims` disagreed). pgTAP `10_qa_hardening`.
 - **Scorer.** Single mode: a replacement phone gets "Take over scoring". Leave game clears timers
