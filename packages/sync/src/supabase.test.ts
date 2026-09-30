@@ -1,10 +1,14 @@
 import type { GameEvent } from '@stats/core';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { SupabaseTransport, SupabaseViewerTransport } from './supabase';
 import { NetworkError, Rejected } from './transport';
 
-const stub = (rpc: () => Promise<unknown>) => new SupabaseTransport({ rpc } as unknown as SupabaseClient, 'g');
+/** A fake client whose rpc() is awaitable and supports .abortSignal(), like postgrest's builder. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const client = (rpc: (...a: any[]) => Promise<unknown>) =>
+  ({ rpc: (...a: unknown[]) => { const p = rpc(...a); return Object.assign(p, { abortSignal: () => p }); } }) as unknown as SupabaseClient;
+const stub = (rpc: () => Promise<unknown>) => new SupabaseTransport(client(rpc), 'g');
 const err = (status: number, code = 'X') => async () => ({ data: null, status, error: { code, message: `status ${status}` } });
 const event = {} as GameEvent;
 
@@ -21,6 +25,20 @@ describe('SupabaseTransport error classification', () => {
     await expect(stub(async () => { throw new TypeError('fetch failed'); }).persist(event)).rejects.toBeInstanceOf(NetworkError);
   });
 
+  test('a request that never answers times out as a network error (retry later)', async () => {
+    const t = new SupabaseTransport({
+      rpc: () => {
+        let answer: (v: unknown) => void = () => {};
+        const p = new Promise((resolve) => (answer = resolve)); // never answers by itself
+        const aborted = () => answer({ data: null, status: 0, error: { code: '', message: 'AbortError' } });
+        return Object.assign(p, { abortSignal: (sig: AbortSignal) => (sig.aborted ? aborted() : sig.addEventListener('abort', aborted), p) });
+      },
+    } as unknown as SupabaseClient, 'g');
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => AbortSignal.abort());
+    await expect(t.persist(event)).rejects.toBeInstanceOf(NetworkError);
+    timeout.mockRestore();
+  });
+
   test('rejection keeps the Postgres error code', async () => {
     await expect(stub(err(403, '42501')).persist(event)).rejects.toMatchObject({ code: '42501' });
   });
@@ -31,12 +49,10 @@ describe('SupabaseTransport error classification', () => {
       [{ seq: 1001 }],
     ];
     const calls: unknown[] = [];
-    const t = new SupabaseTransport({
-      rpc: async (_: string, args: unknown) => {
-        calls.push(args);
-        return { data: pages.shift(), error: null, status: 200 };
-      },
-    } as unknown as SupabaseClient, 'g');
+    const t = new SupabaseTransport(client(async (_: string, args: unknown) => {
+      calls.push(args);
+      return { data: pages.shift(), error: null, status: 200 };
+    }), 'g');
     expect(await t.fetchSince(0)).toHaveLength(1001);
     expect(calls).toEqual([{ game: 'g', after_seq: 0 }, { game: 'g', after_seq: 1000 }]);
   });
@@ -45,7 +61,7 @@ describe('SupabaseTransport error classification', () => {
 describe('SupabaseViewerTransport (read-only)', () => {
   test('persist is always refused; nothing is ever broadcast', async () => {
     const calls: unknown[] = [];
-    const t = new SupabaseViewerTransport({ rpc: async (...a: unknown[]) => (calls.push(a), { data: [], error: null, status: 200 }) } as unknown as SupabaseClient, 'slug1');
+    const t = new SupabaseViewerTransport(client(async (...a: unknown[]) => (calls.push(a), { data: [], error: null, status: 200 })), 'slug1');
     await expect(t.persist({} as GameEvent)).rejects.toBeInstanceOf(Rejected);
     t.broadcast({ kind: 'discard', eventId: 'x' });
     expect(calls).toEqual([]);
@@ -53,7 +69,7 @@ describe('SupabaseViewerTransport (read-only)', () => {
 
   test('catch-up reads public_events by slug', async () => {
     const calls: unknown[] = [];
-    const t = new SupabaseViewerTransport({ rpc: async (fn: string, args: unknown) => (calls.push([fn, args]), { data: [], error: null, status: 200 }) } as unknown as SupabaseClient, 'slug1');
+    const t = new SupabaseViewerTransport(client(async (fn: string, args: unknown) => (calls.push([fn, args]), { data: [], error: null, status: 200 })), 'slug1');
     await t.fetchSince(7);
     expect(calls).toEqual([['public_events', { slug: 'slug1', after_seq: 7 }]]);
   });

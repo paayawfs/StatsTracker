@@ -113,6 +113,18 @@ describe('turnovers', () => {
     expect(r.emitted[1]).toMatchObject({ type: 'amend', payload: { body: { payload: { steal: 'b4' } } } });
   });
 
+  test('no steal prompt after a travel: the next tap selects a player', () => {
+    const r = run(p('a1'), { kind: 'turnover' }, { kind: 'turnoverKind', value: 'travelling' }, p('b2'));
+    expect(r.entry).toEqual({ step: 'player', player: 'b2' });
+    expect(r.emitted.map((e) => e.type)).toEqual(['turnover']);
+  });
+
+  test('TO -> Off. foul records the offensive foul too, same as FOUL -> offensive', () => {
+    const r = run(p('a1'), { kind: 'turnover' }, { kind: 'turnoverKind', value: 'offensiveFoul' });
+    expect(bodies(r.emitted).map((b) => b.type)).toEqual(['foul', 'turnover']);
+    expect(r.state.personalFouls.a1).toBe(1);
+  });
+
   test('skipping the kind records "other"', () => {
     const r = run(p('a2'), { kind: 'turnover' }, { kind: 'skip' });
     expect(r.emitted[0]).toMatchObject({ payload: { kind: 'other' } });
@@ -252,6 +264,17 @@ describe('selection', () => {
 describe('team actions', () => {
   test('timeout', () => {
     expect(bodies(run({ kind: 'timeout', team: 'B' }).emitted)).toEqual([{ type: 'timeout', payload: { team: 'B' } }]);
+  });
+
+  test('no timeout once they are used up', () => {
+    const t: Input = { kind: 'timeout', team: 'B' };
+    expect(run(t, t, t).emitted.map((e) => e.type)).toEqual(['timeout', 'timeout']); // FIBA: 2 in the first half
+  });
+
+  test('the foul that reaches the limit opens the sub panel with that player going out', () => {
+    const foul = [p('b2'), { kind: 'foul' }, { kind: 'foulKind', value: 'personal' }, { kind: 'skip' }] as Input[];
+    const r = run(...foul, ...foul, ...foul, ...foul, ...foul);
+    expect(r.entry).toEqual({ step: 'sub', team: 'B', out: ['b2'], in: [] });
   });
 
   test('timeout stops a running clock first', () => {

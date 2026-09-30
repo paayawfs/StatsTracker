@@ -71,6 +71,8 @@ export function boxScore(events: readonly GameEvent[]): BoxScore {
     teams[p.team][k] += n;
   };
 
+  /** Team of the last shot or free throw, in game order. */
+  let lastAttempt: Team | undefined;
   for (const { event: e, before, after, elapsed } of walk(events)) {
     if (e.type === 'gameStart') {
       for (const t of ['A', 'B'] as const)
@@ -92,6 +94,7 @@ export function boxScore(events: readonly GameEvent[]): BoxScore {
     switch (e.type) {
       case 'shot': {
         const { shooter, value, made, assist, block } = e.payload;
+        lastAttempt = line(shooter)?.team;
         const pts = after.score.A - before.score.A + after.score.B - before.score.B;
         add(shooter, 'fga');
         add(shooter, value === 3 ? 'p3a' : 'p2a');
@@ -108,6 +111,7 @@ export function boxScore(events: readonly GameEvent[]): BoxScore {
         break;
       }
       case 'freeThrow':
+        lastAttempt = line(e.payload.shooter)?.team;
         add(e.payload.shooter, 'fta');
         if (e.payload.made) {
           add(e.payload.shooter, 'ftm');
@@ -116,8 +120,10 @@ export function boxScore(events: readonly GameEvent[]): BoxScore {
         break;
       case 'rebound': {
         const t = e.payload.team;
+        // The recording phone may not have seen the miss yet (offline, or a peer a moment behind).
+        const kind = lastAttempt ? (lastAttempt === t ? 'offensive' : 'defensive') : e.payload.kind;
         if (line(e.payload.player)) {
-          add(e.payload.player, e.payload.kind === 'offensive' ? 'oreb' : 'dreb');
+          add(e.payload.player, kind === 'offensive' ? 'oreb' : 'dreb');
           add(e.payload.player, 'reb');
         } else {
           teams[t].teamReb++;

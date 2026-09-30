@@ -107,7 +107,7 @@ export function CsvImport({ league, teams, players, done }: { league: string; te
           busy.value = true;
           try {
             const n = await importRoster(league, plan);
-            status.value = `Added ${n} players${plan.newTeams.length ? ` and ${plan.newTeams.length} new teams` : ''}.`;
+            status.value = `Added ${n} player${n === 1 ? '' : 's'}${plan.newTeams.length ? ` and ${plan.newTeams.length} new team${plan.newTeams.length === 1 ? '' : 's'}` : ''}.`;
             reset();
             done();
           } catch (e) {

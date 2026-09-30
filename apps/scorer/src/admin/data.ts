@@ -45,10 +45,19 @@ export const createLeague = async (name: string) => must(await db.rpc('create_le
 export const addAdmin = async (league: string, email: string) => must(await db.rpc('add_league_admin', { league, admin_email: email })) as boolean;
 
 export const seasons = async (league: string) => must(await db.from('seasons').select('id, name').eq('league_id', league).order('name')) as Season[];
-export const addSeason = async (league: string, name: string) => must(await db.from('seasons').insert({ league_id: league, name }).select().single());
+/** Names compare ignoring case and extra spaces ("lions" is "Lions"). */
+const sameName = (a: string, b: string) => a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase();
+
+export async function addSeason(league: string, name: string) {
+  if ((await seasons(league)).some((s) => sameName(s.name, name))) throw new Error(`There is already a season called ${name.trim()}.`);
+  return must(await db.from('seasons').insert({ league_id: league, name: name.trim() }).select().single());
+}
 
 export const teams = async (league: string) => must(await db.from('teams').select('id, name').eq('league_id', league).order('name')) as TeamRow[];
-export const addTeam = async (league: string, name: string) => must(await db.from('teams').insert({ league_id: league, name }).select('id, name').single()) as TeamRow;
+export async function addTeam(league: string, name: string) {
+  if ((await teams(league)).some((t) => sameName(t.name, name))) throw new Error(`There is already a team called ${name.trim()}.`);
+  return must(await db.from('teams').insert({ league_id: league, name: name.trim() }).select('id, name').single()) as TeamRow;
+}
 export const players = async (teamIds: string[]) =>
   (teamIds.length ? must(await db.from('players').select('id, team_id, name, default_jersey, photo').in('team_id', teamIds).order('name')) : []) as PlayerRow[];
 

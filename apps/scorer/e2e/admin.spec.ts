@@ -124,8 +124,8 @@ test('admin: import a roster CSV, map the columns, preview, import', async ({ br
   await admin.getByPlaceholder('Team name').fill('Lions');
   await btn(admin, 'Add team').click();
   await admin.getByTestId('team-Lions').getByRole('textbox').fill('23 Kofi Mensah');
-  await admin.getByTestId('team-Lions').getByRole('button', { name: 'Add 1 players' }).click();
-  await expect(admin.getByTestId('team-Lions').getByText('1 players')).toBeVisible();
+  await admin.getByTestId('team-Lions').getByRole('button', { name: 'Add 1 player' }).click();
+  await expect(admin.getByTestId('team-Lions').getByText('1 player', { exact: true })).toBeVisible();
 
   const csv = ['Player,No.,Club', 'Kofi Mensah,23,Lions', 'Ama Ofori,7,Tigers', '"Boateng, Yaw",4,lions', ',9,Tigers', 'Esi Quaye,7,Tigers'].join('\r\n');
   await admin.getByText('Import players from a CSV file').click();
@@ -146,8 +146,8 @@ test('admin: import a roster CSV, map the columns, preview, import', async ({ br
   await admin.getByLabel('Team', { exact: true }).selectOption('2');
 
   await btn(admin, 'Import 2 players').click();
-  await expect(admin.getByText('Added 2 players and 1 new teams.')).toBeVisible();
+  await expect(admin.getByText('Added 2 players and 1 new team.')).toBeVisible();
   await expect(admin.getByTestId('team-Lions').getByText('2 players')).toBeVisible();
-  await expect(admin.getByTestId('team-Tigers').getByText('1 players')).toBeVisible();
+  await expect(admin.getByTestId('team-Tigers').getByText('1 player', { exact: true })).toBeVisible();
   await expect(admin.getByTestId('team-Lions').getByText('Boateng, Yaw')).toBeVisible();
 });

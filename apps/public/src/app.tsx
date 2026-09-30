@@ -3,7 +3,7 @@ import { formatClock, remaining, ZONES, type ShotZone, type Split, type Team, ty
 import { Avatar, Court } from '@stats/ui';
 import { useEffect } from 'preact/hooks';
 import { heat, minutes, pct, signed } from './format';
-import { box, everOnline, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
+import { box, everOnline, events, game, now, online, open, plays, shots, splits, state, units, who, type PublicGame } from './viewer';
 
 type Tab = 'box' | 'plays' | 'lineups' | 'onoff' | 'shots';
 
@@ -13,6 +13,7 @@ export function App() {
     if (slug) void open(slug);
   }, [slug]);
   if (!slug || game.value === 'missing') return <p class="empty">Game not found. Check the link.</p>;
+  if (game.value === 'unreachable') return <p class="empty">Can't reach the server. Retrying…</p>;
   if (!game.value) return <p class="empty">Loading…</p>;
   return <Game g={game.value} />;
 }
@@ -28,10 +29,11 @@ function Game({ g }: { g: PublicGame }) {
   ];
   return (
     <div class="viewer">
+      <h1 class="sr-only">{g.teams.A} v {g.teams.B}: live stats</h1>
       <Header g={g} />
       <nav class="tabs">
         {tabs.map(([t, label]) => (
-          <button key={t} class={tab.value === t ? 'on' : ''} onClick={() => (tab.value = t)}>
+          <button key={t} class={tab.value === t ? 'on' : ''} aria-pressed={tab.value === t} onClick={() => (tab.value = t)}>
             {label}
           </button>
         ))}
@@ -55,24 +57,26 @@ const periodName = (period: number) => {
 
 function Header({ g }: { g: PublicGame }) {
   const st = state.value;
-  const status = st.phase === 'final' || g.locked ? 'FINAL' : st.phase === 'pregame' ? 'Starts soon' : st.phase === 'break' ? `End of ${periodName(st.period)}` : periodName(st.period);
+  // A lock arrives as an event: the game is over for viewers even if the scorer never ended it.
+  const final = st.phase === 'final' || g.locked || events.value.some((e) => e.type === 'adminLock');
+  const status = final ? 'FINAL' : st.phase === 'pregame' ? 'Starts soon' : st.phase === 'break' ? `End of ${periodName(st.period)}` : periodName(st.period);
   useEffect(() => {
     document.title = st.phase === 'pregame' ? `${g.teams.A} v ${g.teams.B}` : `${g.teams.A} ${st.score.A}-${st.score.B} ${g.teams.B} · ${status}`;
   }, [st.score.A, st.score.B, status]);
   return (
-    <header class="board">
+    <header class="board" aria-label="Score">
       <div class="team team-A">
         <span>{g.teams.A}</span>
-        <b data-testid="score-A">{st.score.A}</b>
+        <b data-testid="score-A" aria-live="polite">{st.score.A}</b>
       </div>
       <div class="status">
-        <span class="clock">{st.phase === 'live' ? formatClock(remaining(st.clock, now.value)) : ''}</span>
+        <span class="clock">{st.phase === 'live' && !final ? formatClock(remaining(st.clock, now.value)) : ''}</span>
         <span>{status}</span>
-        {st.phase !== 'final' && <span class={online.value ? 'live' : 'stale'}>{online.value ? '● LIVE' : everOnline.value ? 'reconnecting…' : 'connecting…'}</span>}
+        {!final && st.phase !== 'pregame' && <span class={online.value ? 'live' : 'stale'}>{online.value ? '● LIVE' : everOnline.value ? 'reconnecting…' : 'connecting…'}</span>}
       </div>
       <div class="team team-B">
         <span>{g.teams.B}</span>
-        <b data-testid="score-B">{st.score.B}</b>
+        <b data-testid="score-B" aria-live="polite">{st.score.B}</b>
       </div>
     </header>
   );
@@ -161,13 +165,14 @@ function BoxTable({ g, team }: { g: PublicGame; team: Team }) {
   );
 }
 
-function Plays({ g }: { g: PublicGame }) {
+function Plays({ g: _g }: { g: PublicGame }) {
+  if (!plays.value.length) return <p class="small none">No plays yet. They appear here as they happen.</p>;
   return (
     <ol class="plays" data-testid="plays">
       {plays.value.map((r) => (
         <li key={r.event.id} class={r.scored ? `scored team-${r.scored}` : ''}>
           <span class="t">
-            {periodName(r.event.period)} {r.event.type === 'periodEnd' ? 'end' : formatClock(r.event.gameClock)}
+            {periodName(r.event.period)} {r.event.type === 'periodEnd' || r.event.type === 'gameEnd' ? 'end' : formatClock(r.event.gameClock)}
           </span>
           <span class="text">{r.text}</span>
           <span class="s">
@@ -279,7 +284,7 @@ function Shots({ g }: { g: PublicGame }) {
     <section class="shots">
       <div class="filters">
         {(['all', 'A', 'B'] as const).map((f) => (
-          <button key={f} class={filter.value === f ? 'on' : ''} onClick={() => (filter.value = f)}>
+          <button key={f} class={filter.value === f ? 'on' : ''} aria-pressed={filter.value === f} onClick={() => (filter.value = f)}>
             {f === 'all' ? 'Both teams' : g.teams[f]}
           </button>
         ))}

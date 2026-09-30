@@ -12,6 +12,8 @@ const PAGE = 1000;
  * Fast path: Realtime Broadcast on the private `game:<id>` channel. Durable path: the
  * `insert_event` RPC; the database broadcasts the durable copy on the same channel.
  */
+const REQUEST_TIMEOUT_MS = 10_000;
+
 export class SupabaseTransport implements SyncTransport {
   private channel?: RealtimeChannel;
 
@@ -76,7 +78,9 @@ export class SupabaseTransport implements SyncTransport {
   private async call(fn: string, args: object): Promise<unknown> {
     let res;
     try {
-      res = await this.client.rpc(fn, args);
+      // A stalled mobile connection can leave a request hanging for minutes, and the outbox sends
+      // one at a time: give up after 10 s and retry (inserts are idempotent by event id).
+      res = await this.client.rpc(fn, args).abortSignal(AbortSignal.timeout(REQUEST_TIMEOUT_MS));
     } catch (err) {
       throw new NetworkError(String(err));
     }

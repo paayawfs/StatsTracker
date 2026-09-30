@@ -156,6 +156,9 @@ export class GameSync {
     const corrections = this.log.correctionsFor(targetId);
     const winner = corrections.at(-1);
     if (!winner || new Set(corrections.map((c) => c.deviceId)).size < 2) return;
+    if (!corrections.some((c) => c.deviceId === this.deviceId)) return; // not this phone's business
+    const body = (c: EventOf<'amend' | 'void'>) => JSON.stringify(c.type === 'void' ? 'void' : c.payload.body);
+    if (new Set(corrections.map(body)).size === 1) return; // both phones recorded the same thing
     if (this.notifiedWinner.get(targetId) === winner.id) return;
     this.notifiedWinner.set(targetId, winner.id);
     this.onConflict(targetId, corrections);

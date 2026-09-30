@@ -5,18 +5,25 @@ import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { Input } from './logic/entry';
 import {
-  can, checkpoint, claim, correct, endGame, endPeriod, entry, events, info, input, join, leave, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
+  can, checkpoint, claim, clockNow, correct, endGame, endPeriod, entry, events, info, input, join, leave, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
   pending, playersById, rejected, resume, setClock, showHelp, startGame, state, tapToRender, toggleClock, typed, undo, type Player,
 } from './session';
+
+/** The same button tapped again, with no other tap between, this soon: a double tap, not a second action. */
+const DOUBLE_TAP_MS = 300;
+let lastTap: { target: EventTarget | null; t: number } = { target: null, t: -Infinity };
 
 /** Fire on pointerdown (not click) and record tap-to-render. */
 const tap = (fn: () => void) => ({
   onPointerDown: (e: PointerEvent) => {
     const t = performance.now();
     e.preventDefault();
+    if (e.currentTarget === lastTap.target && t - lastTap.t < DOUBLE_TAP_MS) return;
+    lastTap = { target: e.currentTarget, t };
     fn();
     measureTap(t);
   },
+  onClick: (e: MouseEvent) => e.detail === 0 && fn(), // keyboard or screen reader
 });
 const send = (i: Input) => tap(() => input(i));
 const other = (t: Team): Team => (t === 'A' ? 'B' : 'A');
@@ -111,9 +118,8 @@ function Pregame() {
         ))}
       </div>
       <button class="primary big" disabled={!ok} onClick={() => startGame(starters.value)}>
-        Start game
+        {ok ? 'Start game' : `Pick 5 starters each (${starters.value.A.length}/5, ${starters.value.B.length}/5)`}
       </button>
-      {!ok && <p class="small">Pick exactly 5 starters for each team.</p>}
     </div>
   );
 }
@@ -181,7 +187,7 @@ function TopBar() {
 function ClockAdjust() {
   const open = useSignal(false);
   const value = useSignal('');
-  if (!open.value) return <button class="link" onClick={() => ((open.value = true), (value.value = formatClock(state.value.clock.gameClock)))}>set</button>;
+  if (!open.value) return <button class="link" onClick={() => ((open.value = true), (value.value = formatClock(clockNow())))}>set</button>;
   const apply = () => {
     const [m, s] = value.value.includes(':') ? value.value.split(':') : ['0', value.value];
     const ms = Math.round((Number(m) * 60 + Number(s)) * 1000);
@@ -230,12 +236,12 @@ function Rail({ team }: { team: Team }) {
       </div>
       <p class="meta">
         Fouls {fouls}
-        {bonus.value && <b class="bonus">BONUS</b>} · TO {timeouts}
+        {bonus.value && <b class="bonus">BONUS</b>} · Timeouts {timeouts}
       </p>
       {live && (
         <div class="team-actions">
           {owns && rebounding.value && <button class="accent" {...send({ kind: 'team', team })}>Team REB</button>}
-          {can.value.control && <button {...send({ kind: 'timeout', team })} aria-label={`Timeout ${gi.teams[team]}`}>Timeout</button>}
+          {can.value.control && <button disabled={timeouts.value <= 0} {...send({ kind: 'timeout', team })} aria-label={`Timeout ${gi.teams[team]}`}>Timeout</button>}
           {owns && <button {...send({ kind: 'teamTurnover', team })}>Team TO</button>}
           {owns && <button {...send({ kind: 'benchFoul', team, offender: 'coach' })}>Coach T</button>}
           {owns && <button {...send({ kind: 'benchFoul', team, offender: 'bench' })}>Bench T</button>}
@@ -257,7 +263,8 @@ function Chip({ id }: { id: string }) {
   });
   if (!p) return null;
   return (
-    <button class={cls} {...send({ kind: 'player', id })} data-testid={`player-${p.team}-${p.jersey}`} aria-label={`#${p.jersey} ${p.name}`}>
+    <button class={cls} {...send({ kind: 'player', id })} data-testid={`player-${p.team}-${p.jersey}`} aria-pressed={cls.value.includes(' on')}
+      aria-label={`#${p.jersey} ${p.name}${fouls.value ? `, ${fouls.value} foul${fouls.value > 1 ? 's' : ''}` : ''}`}>
       <b>{p.jersey}</b>
       <span>{lastName(p.name)}</span>
       {fouls.value > 0 && <i class="pf" aria-label={`${fouls.value} fouls`}>{'•'.repeat(fouls.value)}</i>}
@@ -285,7 +292,7 @@ function Stage() {
 
   switch (e.step) {
     case 'idle':
-      hint = 'Tap a player';
+      hint = state.value.clock.running || !can.value.control ? 'Tap a player' : 'Tap the clock to start it, then tap a player';
       break;
     case 'player': {
       const team = state.value.roster[e.player];
@@ -482,7 +489,7 @@ function FreeThrows() {
           <button class="miss" disabled={!p} {...send({ kind: 'ft', made: false })} data-testid="ft-miss">Missed</button>
         </>
       ) : (
-        <i class="small">{team}'s device records these</i>
+        <i class="small">scored on the {team} phone</i>
       )}
     </div>
   );
@@ -567,6 +574,10 @@ function Drawer({ title, close, children }: { title: string; close: () => void; 
   );
 }
 
+/** "period 2", or "OT1" past regulation. */
+const periodLabel = (st: { period: number; rules: { periods: number } | null }) =>
+  st.rules && st.period > st.rules.periods ? `OT${st.period - st.rules.periods}` : `period ${st.period}`;
+
 function Break() {
   const st = state.value;
   const lastEnd = [...events.value].reverse().find((e) => e.type === 'periodEnd');
@@ -581,6 +592,8 @@ function Break() {
         <p class="final">
           {gi.teams.A} {st.score.A} – {st.score.B} {gi.teams.B}
         </p>
+        <p class="small">Game over. The box score is live for fans; the league admin locks the game.</p>
+        <button onClick={leave}>Done: leave game</button>
       </div>
     );
   }
@@ -588,14 +601,14 @@ function Break() {
   if (!can.value.control) {
     return (
       <div class="card break">
-        <h2>End of period {st.period}</h2>
-        <p>Waiting for the game-control device to start the next period.</p>
+        <h2>End of {periodLabel(st)}</h2>
+        <p>Waiting for the {st.roles.clock ? 'Clock' : roleName('teamA')} phone to start the next period.</p>
       </div>
     );
   }
   return (
     <div class="card break">
-      <h2>End of period {st.period}</h2>
+      <h2>End of {periodLabel(st)}</h2>
       {!checked ? (
         <>
           <p>Check the score against the official scoreboard.</p>
@@ -612,10 +625,11 @@ function Break() {
         </>
       ) : (
         <div class="row">
-          <button class="primary" onClick={nextPeriod}>
+          {/* Not tied after regulation: the game is over, so End game is the main button. */}
+          {regulationOver && st.score.A !== st.score.B && <button class="primary" onClick={endGame}>End game</button>}
+          <button class={regulationOver && st.score.A !== st.score.B ? '' : 'primary'} onClick={nextPeriod}>
             Start {regulationOver ? 'overtime' : `period ${st.period + 1}`}
           </button>
-          {regulationOver && st.score.A !== st.score.B && <button onClick={endGame}>End game</button>}
         </div>
       )}
     </div>
@@ -723,6 +737,7 @@ const ROLES: Role[] = ['teamA', 'teamB', 'clock'];
 function Roles() {
   const st = state.value;
   const stopped = !st.clock.running;
+  const control: Role = st.roles.clock ? 'clock' : 'teamA';
   return (
     <div class="roles">
       {ROLES.map((r) => {
@@ -734,7 +749,7 @@ function Roles() {
             <span>{mine ? 'you' : holder ? 'another device' : 'free'}</span>
             {!holder && <button class="primary" onClick={() => claim(r)}>Claim</button>}
             {holder && !mine && (
-              <button disabled={!stopped} title={stopped ? '' : 'Stop the clock first'} onClick={() => takeOver(r)}>
+              <button disabled={!stopped && r !== control} title={stopped || r === control ? '' : 'Stop the clock first'} onClick={() => takeOver(r)}>
                 Take over
               </button>
             )}
@@ -742,7 +757,7 @@ function Roles() {
           </div>
         );
       })}
-      {!stopped && <p class="small">Take-overs happen at a stoppage: stop the clock first.</p>}
+      {!stopped && <p class="small">Team phones are taken over at a stoppage. The {roleName(control)} phone runs the clock, so it can be taken over any time.</p>}
     </div>
   );
 }

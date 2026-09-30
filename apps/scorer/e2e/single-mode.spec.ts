@@ -29,6 +29,7 @@ test('a full single-mode sequence: shots, assist, rebound, foul + free throws, s
   await player(page, 'A', 4).click();
   await btn(page, '2').click();
   await page.getByTestId('ft-made').click();
+  await page.waitForTimeout(400); // the second free throw, not a double tap
   await page.getByTestId('ft-made').click();
   await expect(scoreA).toHaveText('4');
 

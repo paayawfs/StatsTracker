@@ -44,6 +44,7 @@ for (const phone of PHONES) {
     await fits(page, 'free-throw bar');
     await expect(page.getByTestId('ft-made')).toBeInViewport();
     await page.getByTestId('ft-made').click();
+    await page.waitForTimeout(400); // the second free throw, not a double tap
     await page.getByTestId('ft-made').click();
 
     await player(page, 'A', 8).click();

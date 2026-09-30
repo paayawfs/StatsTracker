@@ -50,6 +50,22 @@ export const RuleSetSchema = v.pipe(
 );
 export type RuleSet = v.InferOutput<typeof RuleSetSchema>;
 
+/**
+ * Timeout windows for a new number of periods, keeping each window's share of the game:
+ * FIBA "2 in 1-2, 3 in 3-4" becomes "2 in 1, 3 in 2" for halves.
+ */
+export function rescaleTimeouts(windows: RuleSet['timeouts'], from: number, to: number): RuleSet['timeouts'] {
+  if (to < 1 || from < 1 || to === from) return windows;
+  const out: RuleSet['timeouts'] = [];
+  for (const w of windows) {
+    const periods = [...new Set(w.periods.map((p) => Math.min(to, Math.max(1, Math.ceil((p * to) / from)))))];
+    const same = out.find((o) => o.periods.join() === periods.join());
+    if (same) same.count += w.count;
+    else out.push({ periods, count: w.count });
+  }
+  return out;
+}
+
 // ponytail: FIBA last-2-minutes timeout cap and NBA 4th-quarter timeout limits are not modelled.
 export const FIBA: RuleSet = {
   name: 'FIBA',

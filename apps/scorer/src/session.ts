@@ -2,7 +2,7 @@ import { computed, signal } from '@preact/signals';
 import { initialState, periodLength, type EventBody, type EventOf, type GameEvent, type GameState, type Role, type RuleSet, type Team } from '@stats/core';
 import { GameSync, LocalStore, SupabaseTransport, supabaseClientOptions } from '@stats/sync';
 import { createClient } from '@supabase/supabase-js';
-import { remaining } from '@stats/core';
+import { describe as describeEvent, remaining } from '@stats/core';
 import { idle, step, type Entry, type Input } from './logic/entry';
 import { keyCommand, promptTeam, resolveJersey } from './logic/keys';
 import { capabilities, heldRoles, roleFor } from './logic/ownership';
@@ -75,6 +75,8 @@ let undone = new Set<string>();
 const undoneKey = (gameId: string) => `scorer.undone.${gameId}`;
 /** Stops the timers and listeners of the open game. */
 let stopTimers = () => {};
+/** A peer's miss this phone should take the defensive rebound for, while it was busy. */
+let deferredRebound: Team | null = null;
 /** Roles this device just released, so losing them isn't reported as a take-over. */
 const releasing = new Set<Role>();
 
@@ -110,7 +112,7 @@ async function loadInfo(gameId: string): Promise<GameInfo> {
         const p = r.players as unknown as { name: string; photo: string | null };
         return { id: r.player_id, team: r.team as Team, jersey: r.jersey, name: p.name, photo: p.photo };
       })
-      .sort((a, b) => a.team.localeCompare(b.team) || Number(a.jersey) - Number(b.jersey)),
+      .sort((a, b) => a.team.localeCompare(b.team) || Number(a.jersey) - Number(b.jersey) || a.jersey.localeCompare(b.jersey)),
   };
 }
 
@@ -155,6 +157,11 @@ async function open(gameInfo: GameInfo) {
   }
   const refresh = () => {
     if (sync !== s) return; // a request that finished after Leave game
+    // A half-entered play doesn't carry over a period end or start (a peer's, or this phone's).
+    if (s.log.state.phase !== state.value.phase || s.log.state.period !== state.value.period) {
+      entry.value = idle;
+      deferredRebound = null;
+    }
     state.value = s.log.state;
     events.value = s.log.events.slice(); // GameLog mutates one array; a new one notifies signals
     const last = s.log.events.at(-1);
@@ -242,11 +249,14 @@ function onPeerEvent(e: GameEvent) {
     const shooterTeam = st.roster[e.payload.shooter];
     const defending: Team | undefined = shooterTeam === 'A' ? 'B' : shooterTeam === 'B' ? 'A' : undefined;
     // The defending team's device records the defensive rebound (decision 3).
-    if (shooterTeam && defending && can.value.team(defending) && !can.value.team(shooterTeam) && entry.value.step === 'idle') {
-      entry.value = { step: 'rebound', shooterTeam };
+    if (shooterTeam && defending && can.value.team(defending) && !can.value.team(shooterTeam)) {
+      // Busy with another entry: ask once it's done.
+      if (entry.value.step === 'idle') entry.value = { step: 'rebound', shooterTeam };
+      else deferredRebound = shooterTeam;
     }
-  } else if (entry.value.step === 'rebound' && ['rebound', 'shot', 'turnover', 'periodEnd', 'freeThrow'].includes(e.type)) {
-    entry.value = idle; // someone else answered it
+  } else if (['rebound', 'shot', 'turnover', 'periodEnd', 'freeThrow'].includes(e.type)) {
+    deferredRebound = null;
+    if (entry.value.step === 'rebound') entry.value = idle; // someone else answered it
   }
 }
 
@@ -283,14 +293,29 @@ export function record(body: EventBody, env?: Partial<Pick<GameEvent, 'period' |
 export function input(i: Input) {
   if (!sync) return;
   const r = step(entry.value, i, { state: state.value, events: sync.log.events, stamp: (b) => stamp(b), can: can.value });
+  // A BLK/STL/AST with nothing to attach to records nothing: say so rather than look recorded.
+  const missing = { block: 'a missed shot by the other team', steal: 'a turnover by the other team', assist: "a made shot by a teammate that has no assist" } as const;
+  if (!r.events.length && i.kind in missing && entry.value.step === 'player') notice.value = `Nothing to attach that to: no ${missing[i.kind as keyof typeof missing]}.`;
   entry.value = r.entry;
   for (const e of r.events) sync.record(e);
+  if (deferredRebound && entry.value.step === 'idle' && state.value.reboundable) {
+    entry.value = { step: 'rebound', shooterTeam: deferredRebound };
+    deferredRebound = null;
+  }
 }
 
 export function undo() {
   if (!sync) return;
+  // Another tab of this game may have undone something since this one loaded.
+  try {
+    for (const id of JSON.parse(localStorage.getItem(undoneKey(sync.gameId)) ?? '[]') as string[]) undone.add(id);
+  } catch {
+    // keep what this tab has
+  }
   const u = undoLast(sync.log, sync.deviceId, undone);
   if (!u) return;
+  const target = sync.log.get(u.undoes);
+  if (target) notice.value = `Undone: ${describeEvent(target, (id) => { const p = id ? playersById.value.get(id) : undefined; return p ? `#${p.jersey} ${p.name}` : 'team'; }, info.value?.teams)}`;
   const marker = stamp(u.body);
   undone.add(u.undoes).add(marker.id);
   localStorage.setItem(undoneKey(sync.gameId), JSON.stringify([...undone]));
@@ -378,6 +403,8 @@ function commitJersey() {
 export function onKey(e: KeyboardEvent) {
   if (e.ctrlKey || e.metaKey || e.altKey || (e.target instanceof HTMLElement && e.target.closest('input, textarea'))) return;
   if (!info.value || state.value.phase === 'pregame') return;
+  if ((e.key === 'Enter' || e.key === ' ') && e.target instanceof HTMLElement && e.target.closest('button')) return;
+  if (e.key === 'Tab' && !typed.value && entry.value.step === 'idle') return;
   const cmd = keyCommand(e, entry.value);
   if (!cmd) return;
   e.preventDefault();

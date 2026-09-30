@@ -1,4 +1,4 @@
-import { shotValue, teamFoulCount, type EventBody, type EventOf, type FoulKind, type GameEvent, type GameState, type PlayBody, type Team, type TURNOVER_KINDS } from '@stats/core';
+import { shotValue, teamFoulCount, timeoutsAllowed, type EventBody, type EventOf, type FoulKind, type GameEvent, type GameState, type PlayBody, type Team, type TURNOVER_KINDS } from '@stats/core';
 
 
 type TurnoverKind = (typeof TURNOVER_KINDS)[number];
@@ -47,6 +47,8 @@ export interface Ctx {
 }
 
 export const idle: Entry = { step: 'idle' };
+/** Turnovers that can come with a steal. After the others (travel, 3 sec...) the next tap starts a new play. */
+const STEALABLE = new Set<string>(['badPass', 'ballHandling', 'other']);
 const other = (t: Team): Team => (t === 'A' ? 'B' : 'A');
 
 function lastOf<T extends GameEvent>(events: readonly GameEvent[], match: (e: GameEvent) => e is T): T | undefined {
@@ -104,7 +106,7 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
     if (foul.kind === 'offensive') {
       emit(foulBody({ ...foul, offender: 'player', freeThrows: 0 }));
       emit({ type: 'turnover', payload: { team: foul.team, player: foul.player, kind: 'offensiveFoul' } });
-      return done();
+      return done(afterFoul(foul.team, foul.player));
     }
     // Personal: free throws follow from the team-foul bonus.
     const r = state.rules;
@@ -112,7 +114,14 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
     // In the bonus even if "who was fouled" was skipped: the FT bar then asks for the shooter.
     const bonus = r && teamFoulCount(state, foul.team) >= threshold ? r.teamFoulBonus.freeThrows : 0;
     emit(foulBody({ ...foul, offender: 'player', freeThrows: bonus }));
-    return done();
+    return done(afterFoul(foul.team, foul.player));
+  };
+
+  /** The sub panel with `player` going out, if this foul (just emitted) reached the limit. */
+  const afterFoul = (team: Team, player: string | undefined): Entry => {
+    const limit = state.rules?.personalFoulLimit;
+    const fouls = player ? (state.personalFouls[player] ?? 0) + 1 : 0;
+    return limit && player && fouls >= limit && onFloor(player) ? { step: 'sub', team, out: [player], in: [] } : idle;
   };
 
   const selected = entry.step === 'player' ? entry.player : undefined;
@@ -121,11 +130,18 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
 
   // Team-level actions and free throws work from any step.
   switch (input.kind) {
-    case 'timeout':
+    case 'timeout': {
       if (!canControl) return done(entry);
+      const r = state.rules;
+      if (r) {
+        const w = timeoutsAllowed(r, state.period);
+        const used = w.periods.reduce((n, p) => n + (state.timeouts[input.team][p] ?? 0), 0);
+        if (used >= w.count) return done(entry);
+      }
       if (state.clock.running) emit({ type: 'clockStop', payload: {} });
       emit({ type: 'timeout', payload: { team: input.team } });
       return done();
+    }
     case 'teamTurnover':
       return done(canTeam(input.team) ? { step: 'turnoverKind', team: input.team } : entry);
     case 'benchFoul':
@@ -173,8 +189,9 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
     case 'turnoverKind':
       if (input.kind === 'turnoverKind' || input.kind === 'skip') {
         const kind = input.kind === 'turnoverKind' ? input.value : 'other';
+        if (kind === 'offensiveFoul' && entry.player) return finishFoul({ team: entry.team, player: entry.player, kind: 'offensive' });
         const turnover = emit<Turnover>({ type: 'turnover', payload: { team: entry.team, ...(entry.player ? { player: entry.player } : {}), kind } });
-        return done({ step: 'steal', turnover });
+        return done(STEALABLE.has(kind) ? { step: 'steal', turnover } : idle);
       }
       break;
     case 'foulKind':
@@ -182,7 +199,7 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
         const foul: FoulDraft = { team: entry.team, player: entry.player, kind: input.value };
         if (input.value !== 'technical') return done({ step: 'fouled', foul });
         emit(foulBody({ ...foul, offender: 'player', freeThrows: state.rules?.technicalFreeThrows ?? 1 }));
-        return done();
+        return done(afterFoul(foul.team, foul.player));
       }
       break;
     case 'fouled':
@@ -192,7 +209,7 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
     case 'ftCount':
       if (input.kind === 'ftCount') {
         emit(foulBody({ ...entry.foul, offender: 'player', freeThrows: input.n }));
-        return done();
+        return done(afterFoul(entry.foul.team, entry.foul.player));
       }
       break;
     case 'shotResult':

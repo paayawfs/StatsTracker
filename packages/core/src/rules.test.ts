@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import * as v from 'valibot';
-import { FIBA, NBA, RuleSetSchema, periodLength, timeoutsAllowed } from './rules';
+import { FIBA, NBA, RuleSetSchema, periodLength, rescaleTimeouts, timeoutsAllowed } from './rules';
 
 describe('rule set presets', () => {
   test('FIBA and NBA presets are valid rule sets', () => {
@@ -62,5 +62,16 @@ describe('possession arrow setting', () => {
   test('rule sets saved before the setting existed default to using the arrow', () => {
     const { possessionArrow: _, ...old } = FIBA;
     expect(v.parse(RuleSetSchema, old).possessionArrow).toBe(true);
+  });
+});
+
+describe('rescaleTimeouts', () => {
+  test('FIBA quarters to halves keeps each half its timeouts, and the result validates', () => {
+    const timeouts = rescaleTimeouts(FIBA.timeouts, 4, 2);
+    expect(timeouts).toEqual([{ periods: [1], count: 2 }, { periods: [2], count: 3 }]);
+    expect(v.safeParse(RuleSetSchema, { ...FIBA, periods: 2, timeouts }).success).toBe(true);
+  });
+  test('NBA-style single window folds into fewer periods', () => {
+    expect(rescaleTimeouts([{ periods: [1, 2, 3, 4], count: 7 }], 4, 2)).toEqual([{ periods: [1, 2], count: 7 }]);
   });
 });

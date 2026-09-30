@@ -29,8 +29,9 @@ test('three devices: clock device runs the game, split rebound and free-throw pr
   await btn(b.page, 'shooting').click();
   await player(b.page, 'A', 6).click();
   await btn(b.page, '2').click();
-  await expect(b.page.getByText("Lions's device records these")).toBeVisible();
+  await expect(b.page.getByText('scored on the Lions phone')).toBeVisible();
   await a.page.getByTestId('ft-made').click();
+  await a.page.waitForTimeout(400); // the second free throw, not a double tap
   await a.page.getByTestId('ft-made').click();
   for (const d of [a, b, c]) await expect(d.page.getByTestId('score-A')).toHaveText('2');
 

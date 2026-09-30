@@ -57,6 +57,17 @@ describe('boxScore on a hand-verified game', () => {
 });
 
 describe('boxScore on a live game (no period end yet)', () => {
+  test('rebound kind follows the last attempt in game order, not what the recording phone said', () => {
+    const events = [gameStart(), periodStart(), ev('shot', { shooter: 'a1', value: 2, made: false }), ev('rebound', { team: 'B', player: 'b1', kind: 'offensive' })];
+    expect(boxScore(events).players.find((p) => p.playerId === 'b1')).toMatchObject({ oreb: 0, dreb: 1 });
+  });
+
+  test('an admin correction stamped at 0:00 mid-period adds no minutes', () => {
+    const events = [gameStart(), periodStart(), ev('shot', { shooter: 'a1', value: 2, made: true }, { gameClock: 585_000 }), ev('void', { targetId: 'nothing' }, { gameClock: 0, role: 'admin' })];
+    const a1 = boxScore(events).players.find((p) => p.playerId === 'a1')!;
+    expect(a1.min).toBe(15_000);
+  });
+
   test('minutes count up to the latest event', () => {
     const events = fixture().slice(0, 3); // start + a1's three at 9:00
     expect(boxScore(events).players.find((p) => p.playerId === 'a1')!.min).toBe(MIN);

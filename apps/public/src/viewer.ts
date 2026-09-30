@@ -17,7 +17,7 @@ export interface PublicGame {
   roster: { playerId: string; name: string; jersey: string; team: Team; photo: string | null }[];
 }
 
-export const game = signal<PublicGame | 'missing' | null>(null);
+export const game = signal<PublicGame | 'missing' | 'unreachable' | null>(null);
 export const events = signal<readonly GameEvent[]>([]);
 export const state = signal<GameState>(initialState);
 export const online = signal(false);
@@ -25,7 +25,8 @@ export const online = signal(false);
 export const everOnline = signal(false);
 export const now = signal(Date.now());
 
-const players = computed(() => new Map((game.value && game.value !== 'missing' ? game.value.roster : []).map((p) => [p.playerId, p])));
+const loaded = () => (typeof game.value === 'object' ? game.value : null);
+const players = computed(() => new Map((loaded()?.roster ?? []).map((p) => [p.playerId, p])));
 export const who = (id?: string) => {
   const p = id ? players.value.get(id) : undefined;
   return p ? `#${p.jersey} ${p.name}` : 'Team';
@@ -36,12 +37,18 @@ export const box = computed(() => boxScore(events.value));
 export const units = computed(() => lineups(events.value));
 export const splits = computed(() => onOff(events.value));
 export const shots = computed(() => shotChart(events.value));
-export const plays = computed(() => playByPlay(events.value, who, game.value && game.value !== 'missing' ? game.value.teams : undefined).reverse());
+export const plays = computed(() => playByPlay(events.value, who, loaded()?.teams).reverse());
 
 /** Load a game by its public slug and follow it live. Read-only: viewers never write. */
 export async function open(slug: string) {
   const { data, error } = await supabase.rpc('public_game', { slug });
-  if (error || !data) {
+  if (error) {
+    // The server or the network, not the link: say so and keep trying.
+    game.value = 'unreachable';
+    setTimeout(() => void open(slug), 5000);
+    return;
+  }
+  if (!data) {
     game.value = 'missing';
     return;
   }

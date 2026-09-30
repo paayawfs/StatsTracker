@@ -6,11 +6,11 @@
   --surface-2: #f6f7f9;
   --line: #dde1e7;
   --text: #1b1f27;
-  --muted: #667085;
+  --muted: #5b6474; /* 4.9:1 on the page background */
   --a: #e0591f;
   --b: #1b6fd1;
-  --make: #13985a;
-  --miss: #d23c45;
+  --make: #0f7f4b; /* white text 5:1 */
+  --miss: #b8303a; /* 5:1 on --miss-soft */
   --miss-soft: #fbe7e8;
   --wood: #ecdcc0;
   --wood-line: #a88457;
@@ -31,6 +31,7 @@ h2 { font-size: 1.1rem; }
 p { margin: 0; }
 
 button {
+  -webkit-tap-highlight-color: transparent;
   font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   min-height: 44px; padding: 0.45em 0.9em; cursor: pointer; touch-action: manipulation; user-select: none; -webkit-user-select: none;
 }
@@ -56,6 +57,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .code-input { font-family: var(--num); font-size: 2.2rem; font-weight: 700; letter-spacing: 0.2em; text-align: center; text-transform: uppercase; }
 .code-input::placeholder { color: var(--muted); opacity: 0.45; font-size: 1.4rem; letter-spacing: 0.12em; }
 .pregame > .primary.big { position: sticky; bottom: 8px; box-shadow: var(--shadow); }
+.pregame > .primary.big:disabled { opacity: 1; background: var(--surface-2); border-color: var(--line); color: var(--muted); }
 .pregame-teams { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .pregame-teams h2 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
 .pregame-teams .count { font-family: var(--num); font-size: 1.2rem; color: var(--muted); }
@@ -69,7 +71,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
   grid-template-columns: var(--rail) minmax(0, 1fr) var(--rail);
   grid-template-rows: minmax(0, 1fr) auto;
 }
-.rail { display: grid; grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 6px; padding: 8px; min-height: 0; }
+.rail { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 6px; padding: 8px; min-height: 0; }
 .rail header { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
 .rail.team-B header { flex-direction: row-reverse; }
 .tname { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -142,7 +144,7 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
   background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); font-size: 0.8rem; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
 }
-.no-spot { position: absolute; top: 6px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--surface); border-radius: 999px; box-shadow: var(--shadow); }
+.no-spot { position: absolute; top: 38px; /* under the hint */ left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 4px; padding: 4px; background: var(--surface); border-radius: 999px; box-shadow: var(--shadow); }
 .no-spot button { min-height: 38px; padding: 0 0.7em; font-size: 0.8rem; border-radius: 999px; }
 .shot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: min(100%, 460px); }
 .shot-grid button { min-height: clamp(60px, 18dvh, 130px); font-family: var(--num); font-size: clamp(1.6rem, 6dvh, 2.6rem); border-radius: 16px; }
@@ -243,7 +245,10 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .admin-tabs button { border-radius: 999px; }
 .admin-tabs button.on { background: var(--text); border-color: var(--text); color: #fff; }
 .admin .row input { flex: 1; min-width: min(12em, 100%); }
-.admin code { overflow-wrap: anywhere; } /* long viewer links wrap on phones */
+.admin code { overflow-wrap: anywhere; }
+.admin .scroll-x { overflow-x: auto; }
+.admin .danger { background: var(--miss); border-color: var(--miss); color: #fff; }
+.admin code.code { white-space: nowrap; } /* an 8-character code never splits in two */ /* long viewer links wrap on phones */
 .admin > * { min-width: 0; }
 .admin .list { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
 .link-row { background: none; border: 0; min-height: 0; padding: 4px 0; color: var(--b); text-decoration: underline; text-align: left; font-weight: 600; }

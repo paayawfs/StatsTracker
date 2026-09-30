@@ -1180,3 +1180,41 @@ rule-set validation messages without field names; BLK from the rebound prompt; u
 shot + assist needs two undos); free throws owed at the buzzer; viewer offline reload (no service
 worker); IndexedDB pruning; sub overlay covering bench chips at 1180 with 12-man rosters; "Last, First"
 names (question open).
+
+## QA round 2: four more agents (2026-09-30)
+
+Agents: first-time volunteer scoring a 152-event game; viewer + admin at 6 sizes; stress (slow 3G,
+flaky network, 6x CPU, double taps, 15-man rosters with long names, OT); a 3-phone game with a
+viewer. Every final score and box score matched across phones, server and viewer. Fixed:
+
+- **Scorer flow.** Steal prompt only after a bad pass / lost ball (it turned the next tap into a
+  steal). TO -> Off. foul records the personal foul too. The foul that reaches the limit opens the sub
+  panel. No timeout once they're used up. Clock "set" shows the live time (it reset to the last start).
+  The player hint is no longer hidden by the No-spot bar. "Tap the clock to start it" hint. Undo says
+  what it undid; BLK/STL/AST with nothing to attach to says so. Double taps (same button, no other tap
+  between, < 300 ms) are ignored. Overtime break says OT1 and makes End game the main button when not
+  tied. Final screen has "Done: leave game". Long team names no longer push the rails off-screen
+  (`.rail` column was auto-sized). Rail says "Timeouts" (not "TO").
+- **Multi-device.** The clock (control) role can be taken over while the clock runs: a dead clock phone
+  froze the game. Rebound kind comes from the last attempt in game order (box score), not the recording
+  phone's stale view. A half-entered play is cleared on a period change. A defensive-rebound prompt
+  waits for a busy phone instead of being dropped. Conflict notices only on a phone that made one of
+  the corrections, and not when they agree.
+- **Sync.** Requests time out after 10 s (`AbortSignal.timeout`) so a stalled connection can't block the
+  outbox forever. Undo re-reads the undone ids, so two tabs of one game cooperate.
+- **Stats.** Bookkeeping events (corrections, locks, role changes, checkpoints) don't advance game time
+  in `walk()`: an admin correction stamped 0:00 gave everyone on court the rest of the period.
+- **Admin.** Changing the number of periods rescales the timeout windows (`rescaleTimeouts`), so a
+  two-halves rule set saves. Duplicate team/season names refused. Remove asks first. Loading states,
+  plurals, latency table scrolls on phones, flags in words, correction rows keyboard-reachable.
+- **Viewer.** An admin lock shows FINAL at once (no LIVE). "Can't reach the server. Retrying…" instead
+  of "Game not found" on API errors. No LIVE badge before tip-off. Tabs wrap on phones. Empty
+  play-by-play message. h1, aria-pressed tabs/filters, aria-live scores. Text follows the browser size.
+- **Accessibility (scorer).** Keyboard: Enter/Space on a focused button and Tab when idle stay native;
+  buttons also fire on keyboard clicks (`detail === 0`). Chips announce fouls and pressed state. Pinch
+  zoom allowed. Contrast: --make, --miss, --muted darkened to >= 4.5:1.
+
+Backlog added: technical fouls/subs during a break; reload mid-prompt loses the half-entered play;
+chips show last names only (duplicates); who records steals/blocks in multi mode (both phones can);
+switching control mid-pregame drops the starter picks; shot-chart heat colours reuse team colours;
+viewer jargon (OR/DR/EFF, /40); admin unlock, rename/delete, live score on the admin game page.

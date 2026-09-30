@@ -1,5 +1,5 @@
 import { useSignal } from '@preact/signals';
-import { boxScore, describe, eventsCsv, FIBA, formatClock, NBA, seasonTotals, summarize, type GameEvent, type GameLog, type RuleSet } from '@stats/core';
+import { boxScore, describe, eventsCsv, FIBA, formatClock, NBA, rescaleTimeouts, seasonTotals, summarize, type GameEvent, type GameLog, type RuleSet } from '@stats/core';
 import type { ComponentChildren } from 'preact';
 import { Avatar, photoFromFile } from '@stats/ui';
 import { CsvImport } from './csv-import';
@@ -47,7 +47,9 @@ function useAction() {
   return { run, error: error.value, busy: busy.value };
 }
 
-const Err = ({ msg }: { msg: string }) => (msg ? <p class="error">{msg}</p> : null);
+/** An error, or "Loading…" while there is neither data nor an error yet. */
+const Err = ({ msg, loading }: { msg: string; loading?: boolean }) => (msg ? <p class="error">{msg}</p> : loading ? <p class="small">Loading…</p> : null);
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
 export function Admin() {
   if (!user.value) return <SignIn />;
@@ -142,7 +144,7 @@ function Games({ league, open }: { league: League; open: (id: string) => void })
   const { data, error, reload } = useLoad(async () => ({ games: await games(league.id), teams: await teams(league.id), seasons: await seasons(league.id), rules: await ruleSets(league.id) }), [league.id]);
   const form = useSignal({ team_a: '', team_b: '', season_id: '', rule_set_id: '', mode: 'single' as 'single' | 'multi', shot_locations: false, scheduled_at: '' });
   const act = useAction();
-  if (!data) return <Err msg={error} />;
+  if (!data) return <Err msg={error} loading />;
   const name = (id: string) => data.teams.find((t) => t.id === id)?.name ?? '?';
   const f = form.value;
   const set = (patch: Partial<typeof f>) => (form.value = { ...f, ...patch });
@@ -197,7 +199,7 @@ function Teams({ league }: { league: League }) {
   const newTeam = useSignal('');
   const paste = useSignal<Record<string, string>>({});
   const act = useAction();
-  if (!data) return <Err msg={error} />;
+  if (!data) return <Err msg={error} loading />;
   return (
     <section>
       <form class="row" onSubmit={(e) => (e.preventDefault(), void act.run(() => addTeam(league.id, newTeam.value.trim()), () => ((newTeam.value = ''), reload())))}>
@@ -222,7 +224,7 @@ function TeamCard({ team, players: ps, text, onText, onAdd, onPhoto }: { team: T
   const sorted = [...ps].sort((a, b) => Number(a.default_jersey ?? 999) - Number(b.default_jersey ?? 999));
   return (
     <article class="team-card" data-testid={`team-${team.name}`}>
-      <h3>{team.name} <span class="small">{ps.length} players</span></h3>
+      <h3>{team.name} <span class="small">{plural(ps.length, 'player')}</span></h3>
       <ol class="roster-list">
         {sorted.map((p) => (
           <li key={p.id}>
@@ -241,7 +243,7 @@ function TeamCard({ team, players: ps, text, onText, onAdd, onPhoto }: { team: T
       </ol>
       <label for={`paste-${team.id}`} class="small">Add players, one per line: "23 Kofi Mensah"</label>
       <textarea id={`paste-${team.id}`} rows={4} value={text} onInput={(e) => onText(e.currentTarget.value)} />
-      <button onClick={onAdd} disabled={!parsePlayers(text).length}>Add {parsePlayers(text).length || ''} players</button>
+      <button onClick={onAdd} disabled={!parsePlayers(text).length}>Add {parsePlayers(text).length ? plural(parsePlayers(text).length, 'player') : 'players'}</button>
     </article>
   );
 }
@@ -291,7 +293,7 @@ function Rules({ league }: { league: League }) {
         <form class="form-grid" onSubmit={(ev) => (ev.preventDefault(), void act.run(() => saveRuleSet(league.id, e.rules, e.id), () => ((editing.value = null), reload())))}>
           <label for="r-name">Name</label>
           <input id="r-name" value={e.rules.name} onInput={(ev) => set({ name: ev.currentTarget.value })} />
-          {num('Periods', 'r-periods', e.rules.periods, (n) => set({ periods: n }))}
+          {num('Periods', 'r-periods', e.rules.periods, (n) => set({ periods: n, timeouts: rescaleTimeouts(e.rules.timeouts, e.rules.periods, n) }))}
           {num('Period length (min)', 'r-len', e.rules.periodLengthMs / MIN, (n) => set({ periodLengthMs: Math.round(n * MIN) }), 0.5)}
           {num('Overtime length (min)', 'r-ot', e.rules.overtimeLengthMs / MIN, (n) => set({ overtimeLengthMs: Math.round(n * MIN) }), 0.5)}
           {num('Personal fouls to foul out', 'r-pf', e.rules.personalFoulLimit, (n) => set({ personalFoulLimit: n }))}
@@ -494,6 +496,7 @@ function Latency({ rows }: { rows: { device_id: string; kind: 'render' | 'peer';
     );
   };
   return (
+    <div class="scroll-x">
     <table class="admin-table num" data-testid="latency">
       <thead><tr><th>Device</th><th>Path</th><th>n</th><th>median ms</th><th>p95 ms</th><th>max ms</th><th>budget</th></tr></thead>
       <tbody>
@@ -502,11 +505,13 @@ function Latency({ rows }: { rows: { device_id: string; kind: 'render' | 'peer';
         {devices.flatMap((d) => [line(`…${d.slice(-6)}`, 'render', (r) => r.device_id === d), line(`…${d.slice(-6)}`, 'peer', (r) => r.device_id === d)])}
       </tbody>
     </table>
+    </div>
   );
 }
 
 function Corrections({ log, who, fix }: { log: GameLog; who: (id?: string) => string; fix: (body: Parameters<typeof adminWrite>[2]) => void }) {
   const open = useSignal<string | null>(null);
+  const confirming = useSignal<string | null>(null);
   const HIDE = new Set(['roleClaim', 'roleRelease', 'roleTransfer', 'amend', 'void', 'gameStart', 'clockStart', 'clockStop']);
   const rows = [...log.events].reverse().filter((e) => !HIDE.has(e.type));
   const flags = new Map<string, string[]>();
@@ -515,12 +520,17 @@ function Corrections({ log, who, fix }: { log: GameLog; who: (id?: string) => st
     <div class="pbp-admin">
       {log.state.flags.length > 0 && <p class="small">{log.state.flags.length} data-quality flags (marked ⚑).</p>}
       {rows.map((e: GameEvent) => (
-        <div key={e.id} class="row-event" onClick={() => (open.value = open.value === e.id ? null : e.id)}>
+        <div key={e.id} class="row-event" role="button" tabIndex={0} aria-expanded={open.value === e.id}
+          onClick={() => (open.value = open.value === e.id ? null : e.id)} onKeyDown={(k) => (k.key === 'Enter' || k.key === ' ') && (k.preventDefault(), (open.value = open.value === e.id ? null : e.id))}>
           <span class="t">P{e.period} {formatClock(e.gameClock)}</span>
-          <span>{describe(e, who)}{flags.has(e.id) && <b class="flag" title={flags.get(e.id)!.join(', ')}> ⚑ {flags.get(e.id)!.join(', ')}</b>}</span>
+          <span>{describe(e, who)}{flags.has(e.id) && <b class="flag" title={flags.get(e.id)!.join(', ')}> ⚑ {flags.get(e.id)!.map((c) => c.replace(/-/g, ' ')).join(', ')}</b>}</span>
           {open.value === e.id && (
             <span class="row-actions">
-              <button onClick={() => fix({ type: 'void', payload: { targetId: e.id } })}>Remove</button>
+              {confirming.value === e.id ? (
+                <button class="danger" onClick={(ev) => (ev.stopPropagation(), (confirming.value = null), fix({ type: 'void', payload: { targetId: e.id } }))}>Yes, remove this play</button>
+              ) : (
+                <button onClick={(ev) => (ev.stopPropagation(), (confirming.value = e.id))}>Remove</button>
+              )}
               {e.type === 'shot' && <button onClick={() => fix({ type: 'amend', payload: { targetId: e.id, body: { type: 'shot', payload: { ...e.payload, made: !e.payload.made, ...(e.payload.made ? { assist: undefined } : { block: undefined }) } } } })}>{e.payload.made ? 'Mark missed' : 'Mark made'}</button>}
               {e.type === 'shot' && <button onClick={() => fix({ type: 'amend', payload: { targetId: e.id, body: { type: 'shot', payload: { ...e.payload, value: e.payload.value === 2 ? 3 : 2 } } } })}>Make it {e.payload.value === 2 ? 3 : 2}PT</button>}
             </span>
