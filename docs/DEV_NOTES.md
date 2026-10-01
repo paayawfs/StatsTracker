@@ -1247,7 +1247,7 @@ viewer jargon (OR/DR/EFF, /40); admin unlock, rename/delete, live score on the a
   phone claiming mid-pregame, a take-over) opens with the picks, and a reload keeps them. Owned by game
   control like `gameStart` (`ownership.ts`, migration `20261001120000_starters`, pgTAP `12_starters`);
   hidden from play-by-play, the scorer log and admin corrections; skipped by undo and game time.
-  Event schema regenerated (`20261001211833_event_schema`).
+  Event schema regenerated (`20261001211833_event_schema`). Both pushed to hosted 2026-10-01.
 - **Heat map colours.** One violet, darker with FG%, so a section never reads as a team colour
   (orange/blue) or make/miss (green/red). Strength by attempts as before.
 - **Admin live score.** The game page re-reads the log every 5 s while the game is unlocked (score,
