@@ -97,7 +97,9 @@ export function Court({ onTap, highlight, fills = {}, labels = {}, children, cla
       <circle class="court-rim" cx={BASKET.x} cy={BASKET.y} r="2.3" />
       {ZONES.map(({ id: z }) =>
         labels[z] ? (
-          <text key={z} class="court-label" x={ZONE_LABEL_AT[z][0]} y={ZONE_LABEL_AT[z][1]} text-anchor="middle" dominant-baseline="middle">
+          // Corner threes are a narrow strip: their label runs up it instead of across.
+          <text key={z} class="court-label" x={ZONE_LABEL_AT[z][0]} y={ZONE_LABEL_AT[z][1]} text-anchor="middle" dominant-baseline="middle"
+            transform={z.startsWith('corner3') ? `rotate(-90 ${ZONE_LABEL_AT[z][0]} ${ZONE_LABEL_AT[z][1]})` : undefined}>
             {labels[z]}
           </text>
         ) : null,

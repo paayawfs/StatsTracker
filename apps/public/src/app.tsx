@@ -337,7 +337,7 @@ function Shots({ g }: { g: PublicGame }) {
         </table>
         </div>
       </div>
-      <p class="small">Numbers on the court are made/attempted per section; colour runs from cold (blue) to hot (orange), stronger with more attempts. Scorers record the section of each shot, not an exact spot.</p>
+      <p class="small">Numbers on the court are made/attempted per section; colour runs from light (cold) to deep violet (hot), stronger with more attempts; sections with no shots stay plain. Scorers record the section of each shot, not an exact spot.</p>
     </section>
   );
 }
