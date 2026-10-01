@@ -1238,4 +1238,4 @@ viewer jargon (OR/DR/EFF, /40); admin unlock, rename/delete, live score on the a
 - **Admin.** Rename/delete teams, players (name + jersey), seasons; delete rule sets; delete a game no
   one has scored. Deletes of things still in use are refused with a plain reason (FK 23503). Unlock =
   an admin `void` of the `adminLock` event: `GameLog` stops applying a lifted lock, and migration
-  `20261001090000_unlock` clears `games.locked_at` (pgTAP `11_unlock`).
+  `20261001090000_unlock` clears `games.locked_at` (pgTAP `11_unlock`). Pushed to hosted 2026-10-01.
