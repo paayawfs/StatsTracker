@@ -85,6 +85,22 @@ test('a second claim on a held role is refused', async ({ browser }) => {
   await expect(a.page.getByText('Confirm starters')).toBeVisible(); // A holds control (no clock role)
 });
 
+test('starter picks follow game control to the clock device', async ({ browser }) => {
+  const g = await createGame(false, 'multi');
+  const a = await device(browser, g.code, 'teamA');
+  for (const j of [4, 5, 6, 7, 8]) await a.page.getByTestId(`starter-${j}-A`).click();
+  await a.page.getByTestId('starter-4-B').click();
+
+  const c = await device(browser, g.code, 'clock'); // control moves from Team A to Clock
+  await expect(a.page.getByText('Waiting for the game to start')).toBeVisible();
+  await expect(c.page.getByTestId('starter-8-A')).toHaveAttribute('aria-pressed', 'true');
+  await expect(c.page.getByTestId('starter-4-B')).toHaveAttribute('aria-pressed', 'true');
+  for (const j of [5, 6, 7, 8]) await c.page.getByTestId(`starter-${j}-B`).click();
+  await c.page.getByRole('button', { name: 'Start game' }).click();
+  await expect(a.page.getByTestId('clock')).toHaveText('10:00');
+  await expect(player(a.page, 'A', 4)).toBeVisible();
+});
+
 test('a dead device: another device takes over its role at a stoppage', async ({ browser }) => {
   const g = await createGame(false, 'multi');
   const a = await device(browser, g.code, 'teamA');

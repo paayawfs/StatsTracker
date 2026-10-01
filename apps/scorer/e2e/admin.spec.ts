@@ -77,6 +77,11 @@ test('admin: set up a league, run a game with a scorer, lock it, export, season 
   await admin.getByRole('button', { name: 'Lions vs Tigers' }).click();
   await expect(admin.getByRole('heading', { name: 'Lions 3 – 2 Tigers' })).toBeVisible();
   await expect(admin.getByTestId('latency')).toContainText('tap → own screen');
+  // The score follows the game without a reload.
+  await player(scorer, 'B', 6).click();
+  await btn(scorer, '2 ✓').click();
+  await btn(scorer, 'Skip').click();
+  await expect(admin.getByRole('heading', { name: 'Lions 3 – 4 Tigers' })).toBeVisible({ timeout: 10_000 });
 
   // Export CSV.
   const [download] = await Promise.all([admin.waitForEvent('download'), btn(admin, 'Export CSV').click()]);
@@ -96,7 +101,7 @@ test('admin: set up a league, run a game with a scorer, lock it, export, season 
   // Admins can still correct after the lock.
   await admin.getByText('#4 Lions 4 3PT made').click();
   await btn(admin, 'Make it 2PT').click();
-  await expect(admin.getByRole('heading', { name: 'Lions 2 – 2 Tigers' })).toBeVisible();
+  await expect(admin.getByRole('heading', { name: 'Lions 2 – 4 Tigers' })).toBeVisible();
 
   // Unlock: scorers can write again.
   await btn(admin, 'Unlock game…').click();

@@ -14,7 +14,7 @@ export interface Step {
  * the state around it. All derived stats are folds over this.
  */
 /** Bookkeeping, not play: their clock (e.g. 0 on an admin correction) says nothing about game time. */
-const NO_TIME = new Set(['amend', 'void', 'adminLock', 'checkpoint', 'roleClaim', 'roleRelease', 'roleTransfer']);
+const NO_TIME = new Set(['amend', 'void', 'adminLock', 'checkpoint', 'starters', 'roleClaim', 'roleRelease', 'roleTransfer']);
 
 export function* walk(events: readonly GameEvent[]): Generator<Step> {
   let state = initialState;

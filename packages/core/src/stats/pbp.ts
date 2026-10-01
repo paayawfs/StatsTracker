@@ -60,7 +60,7 @@ export interface PlayRow {
 }
 
 /** Not interesting to viewers: bookkeeping, and corrections (already applied to the log). */
-const HIDDEN = new Set(['gameStart', 'roleClaim', 'roleRelease', 'roleTransfer', 'amend', 'void', 'adminLock', 'checkpoint', 'clockStart', 'clockStop', 'possessionArrow']);
+const HIDDEN = new Set(['gameStart', 'roleClaim', 'roleRelease', 'roleTransfer', 'amend', 'void', 'adminLock', 'checkpoint', 'starters', 'clockStart', 'clockStop', 'possessionArrow']);
 
 /** Viewer play-by-play over the effective log, oldest first, with the running score. */
 export function playByPlay(events: readonly GameEvent[], who: Who, teams?: Record<Team, string>): PlayRow[] {

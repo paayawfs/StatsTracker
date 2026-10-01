@@ -194,6 +194,13 @@ describe('session events', () => {
   test('adminLock locks the game', () => {
     expect(live(ev('adminLock', {})).locked).toBe(true);
   });
+
+  test('the latest starters event is the pregame picks, with no flags before gameStart', () => {
+    const s = run(ev('starters', { lineups: { A: ['a1'], B: [] } }), ev('starters', { lineups: { A: ['a1', 'a2'], B: ['b1'] } }));
+    expect(s.starters).toEqual({ A: ['a1', 'a2'], B: ['b1'] });
+    expect(s.flags).toEqual([]);
+    expect(s.phase).toBe('pregame');
+  });
 });
 
 describe('purity', () => {

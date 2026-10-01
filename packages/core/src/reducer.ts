@@ -26,6 +26,8 @@ export interface GameState {
   clock: { running: boolean; gameClock: number; wallClock: number };
   /** playerId -> team */
   roster: Record<string, Team>;
+  /** Pregame picks (latest `starters` event). */
+  starters: Record<Team, string[]>;
   onFloor: Record<Team, string[]>;
   score: Record<Team, number>;
   personalFouls: Record<string, number>;
@@ -49,6 +51,7 @@ export const initialState: GameState = {
   period: 0,
   clock: { running: false, gameClock: 0, wallClock: 0 },
   roster: {},
+  starters: { A: [], B: [] },
   onFloor: { A: [], B: [] },
   score: { A: 0, B: 0 },
   personalFouls: {},
@@ -162,6 +165,9 @@ export function apply(state: GameState, e: GameEvent): GameState {
     case 'roleTransfer':
       s.roles[e.payload.role] = e.payload.toDeviceId;
       if (e.payload.role === 'clock') s.clockRoleSeen = true;
+      break;
+    case 'starters':
+      s.starters = { A: [...e.payload.lineups.A], B: [...e.payload.lineups.B] };
       break;
     case 'adminLock':
       s.locked = true;

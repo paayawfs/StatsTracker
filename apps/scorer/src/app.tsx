@@ -76,12 +76,13 @@ function Join() {
 
 function Pregame() {
   const gi = info.value!;
-  const starters = useSignal<Record<Team, string[]>>({ A: [], B: [] });
+  // Picks are recorded as they're made, so a phone that takes over control carries on with them.
+  const starters = state.value.starters;
   const toggle = (p: Player) => {
-    const list = starters.value[p.team];
-    starters.value = { ...starters.value, [p.team]: list.includes(p.id) ? list.filter((id) => id !== p.id) : [...list, p.id] };
+    const list = starters[p.team];
+    record({ type: 'starters', payload: { lineups: { ...starters, [p.team]: list.includes(p.id) ? list.filter((id) => id !== p.id) : [...list, p.id] } } });
   };
-  const ok = starters.value.A.length === 5 && starters.value.B.length === 5;
+  const ok = starters.A.length === 5 && starters.B.length === 5;
   if (!can.value.control) {
     return (
       <div class="sheet wide">
@@ -100,11 +101,11 @@ function Pregame() {
         {(['A', 'B'] as const).map((t) => (
           <section key={t} class={`team-${t}`}>
             <h2>
-              {gi.teams[t]} <span class={starters.value[t].length === 5 ? 'count ok' : 'count'}>{starters.value[t].length}/5</span>
+              {gi.teams[t]} <span class={starters[t].length === 5 ? 'count ok' : 'count'}>{starters[t].length}/5</span>
             </h2>
             <div class="starter-grid">
               {gi.players.filter((p) => p.team === t).map((p) => {
-                const on = starters.value[t].includes(p.id);
+                const on = starters[t].includes(p.id);
                 return (
                   <button key={p.id} class={on ? 'starter on' : 'starter'} onClick={() => toggle(p)} data-testid={`starter-${p.jersey}-${t}`} aria-pressed={on}>
                     <Avatar name={p.name} photo={p.photo} team={t} size={40} />
@@ -118,8 +119,8 @@ function Pregame() {
           </section>
         ))}
       </div>
-      <button class="primary big" disabled={!ok} onClick={() => startGame(starters.value)}>
-        {ok ? 'Start game' : `Pick 5 starters each (${starters.value.A.length}/5, ${starters.value.B.length}/5)`}
+      <button class="primary big" disabled={!ok} onClick={() => startGame(starters)}>
+        {ok ? 'Start game' : `Pick 5 starters each (${starters.A.length}/5, ${starters.B.length}/5)`}
       </button>
     </div>
   );
@@ -641,7 +642,7 @@ function Break() {
 
 function PlayByPlay() {
   const selected = useSignal<string | null>(null);
-  const list = [...events.value].reverse().filter((e) => !['roleClaim', 'roleRelease', 'roleTransfer'].includes(e.type));
+  const list = [...events.value].reverse().filter((e) => !['roleClaim', 'roleRelease', 'roleTransfer', 'starters'].includes(e.type));
   const actions = (e: GameEvent) => (
     <span class="row-actions">
       <button onClick={() => correct({ targetId: e.id }, 'void')}>Remove</button>

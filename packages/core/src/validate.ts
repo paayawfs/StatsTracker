@@ -3,7 +3,7 @@ import type { Flag, GameState } from './reducer';
 import { timeoutsAllowed } from './rules';
 
 const other = (t: Team): Team => (t === 'A' ? 'B' : 'A');
-const ALLOWED_BEFORE_START = new Set(['roleClaim', 'roleRelease', 'roleTransfer', 'adminLock', 'amend', 'void', 'gameStart']);
+const ALLOWED_BEFORE_START = new Set(['roleClaim', 'roleRelease', 'roleTransfer', 'adminLock', 'amend', 'void', 'gameStart', 'starters']);
 
 /** Team fouls that count toward the bonus in the current period. */
 export function teamFoulCount(s: GameState, team: Team): number {

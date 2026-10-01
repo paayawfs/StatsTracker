@@ -1,7 +1,7 @@
 import type { GameLog, PlayBody } from '@stats/core';
 
 export type UndoBody = { type: 'void'; payload: { targetId: string } } | { type: 'amend'; payload: { targetId: string; body: PlayBody } };
-const SESSION = new Set(['roleClaim', 'roleRelease', 'roleTransfer', 'adminLock']);
+const SESSION = new Set(['roleClaim', 'roleRelease', 'roleTransfer', 'adminLock', 'starters']);
 
 /**
  * The correction that undoes this device's most recent action, or null. Undoing a correction

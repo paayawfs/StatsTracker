@@ -123,6 +123,8 @@ const SessionBodySchema = v.variant('type', [
   body('roleClaim', v.object({ role })),
   body('roleRelease', v.object({ role })),
   body('roleTransfer', v.object({ role, toDeviceId: id })),
+  /** Pregame: the starters picked so far, so a phone that takes over control carries on with them. */
+  body('starters', v.object({ lineups: v.object({ A: v.array(id), B: v.array(id) }) })),
   /** Period-end reconciliation: the score on the official scoreboard. */
   body('checkpoint', v.object({ score: v.object({ A: count, B: count }) })),
   body('adminLock', empty),

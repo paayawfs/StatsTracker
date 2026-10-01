@@ -15,6 +15,7 @@ describe('ownerRole mirrors the server rules', () => {
     [{ type: 'substitution', payload: { team: 'A', out: ['a1'], in: [] } }, 'teamA'],
     [{ type: 'timeout', payload: { team: 'B' } }, 'teamA'],
     [{ type: 'clockStart', payload: {} }, 'teamA'],
+    [{ type: 'starters', payload: { lineups: { A: [], B: [] } } }, 'teamA'],
     [{ type: 'void', payload: { targetId: 'x' } }, 'any'],
     [{ type: 'checkpoint', payload: { score: { A: 0, B: 0 } } }, 'any'],
   ] as const)('%j -> %s', (body, owner) => {

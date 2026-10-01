@@ -1,6 +1,6 @@
 import type { EventBody, GameState, Role, Team } from '@stats/core';
 
-const CONTROL = new Set(['gameStart', 'periodStart', 'periodEnd', 'gameEnd', 'clockStart', 'clockStop', 'timeout', 'jumpBall', 'possessionArrow']);
+const CONTROL = new Set(['gameStart', 'starters', 'periodStart', 'periodEnd', 'gameEnd', 'clockStart', 'clockStop', 'timeout', 'jumpBall', 'possessionArrow']);
 
 /**
  * Which role owns an event (brief section 6). Mirrors `authorize_event` in

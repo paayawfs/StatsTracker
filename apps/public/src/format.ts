@@ -12,12 +12,13 @@ export const signed = (n: number | null, digits = 0) => {
 };
 
 /**
- * Section heat colour: hue by FG% (blue 0% -> orange-red 100%), strength by attempts so one lucky
- * shot doesn't look red-hot. Undefined with no attempts.
+ * Section heat colour: one violet, darker with FG% (pale 0% -> deep 100%), so it never reads as a
+ * team colour (orange, blue) or make/miss (green, red). Strength by attempts so one lucky shot doesn't
+ * look hot. Undefined with no attempts.
  */
 export function heat(made: number, att: number): string | undefined {
   if (!att) return undefined;
   const p = made / att;
   const alpha = Math.round(Math.min(0.6, 0.25 + 0.07 * att) * 100) / 100;
-  return `hsla(${Math.round(215 - 203 * p)}, ${Math.round(75 + 10 * p)}%, ${Math.round(50 + 2 * p)}%, ${alpha})`;
+  return `hsla(270, 60%, ${Math.round(85 - 45 * p)}%, ${alpha})`;
 }

@@ -451,8 +451,19 @@ function GamePage({ league, gameId, back }: { league: League; gameId: string; ba
   const confirmLock = useSignal(false);
   const confirmUnlock = useSignal(false);
   const confirmDelete = useSignal(false);
+  // Live score: re-read just the log while scorers can still write; a reload brings a fresher one.
+  // ponytail: polls every 5 s; follow the viewer channel if admins need instant updates.
+  const live = useSignal<GameLog | null>(null);
+  useEffect(() => {
+    live.value = null;
+    if (!data || data.game.locked_at) return;
+    let on = true;
+    const t = setInterval(() => void gameLog(gameId).then((l) => on && (live.value = l), () => {}), 5000);
+    return () => ((on = false), clearInterval(t));
+  }, [data]);
   if (!data) return <div class="admin"><button onClick={back}>‹ Games</button><Err msg={error} /></div>;
-  const { game, log } = data;
+  const { game } = data;
+  const log = live.value ?? data.log;
   const name = (id: string) => data.teams.find((t) => t.id === id)?.name ?? '?';
   const st = log.state;
   const started = st.phase !== 'pregame';
@@ -587,7 +598,7 @@ function Latency({ rows }: { rows: { device_id: string; kind: 'render' | 'peer';
 function Corrections({ log, who, fix }: { log: GameLog; who: (id?: string) => string; fix: (body: Parameters<typeof adminWrite>[2]) => void }) {
   const open = useSignal<string | null>(null);
   const confirming = useSignal<string | null>(null);
-  const HIDE = new Set(['roleClaim', 'roleRelease', 'roleTransfer', 'amend', 'void', 'gameStart', 'clockStart', 'clockStop']);
+  const HIDE = new Set(['roleClaim', 'roleRelease', 'roleTransfer', 'starters', 'amend', 'void', 'gameStart', 'clockStart', 'clockStop']);
   const rows = [...log.events].reverse().filter((e) => !HIDE.has(e.type));
   const flags = new Map<string, string[]>();
   for (const f of log.state.flags) flags.set(f.eventId, [...(flags.get(f.eventId) ?? []), f.code]);

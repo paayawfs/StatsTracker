@@ -1239,3 +1239,17 @@ viewer jargon (OR/DR/EFF, /40); admin unlock, rename/delete, live score on the a
   one has scored. Deletes of things still in use are refused with a plain reason (FK 23503). Unlock =
   an admin `void` of the `adminLock` event: `GameLog` stops applying a lifted lock, and migration
   `20261001090000_unlock` clears `games.locked_at` (pgTAP `11_unlock`). Pushed to hosted 2026-10-01.
+
+## QA round 2 leftovers (2026-10-01)
+
+- **Starter picks follow control.** Each pick records a `starters` session event (the whole pick so
+  far); `state.starters` is the latest. Pregame reads it, so a phone that takes over control (a Clock
+  phone claiming mid-pregame, a take-over) opens with the picks, and a reload keeps them. Owned by game
+  control like `gameStart` (`ownership.ts`, migration `20261001120000_starters`, pgTAP `12_starters`);
+  hidden from play-by-play, the scorer log and admin corrections; skipped by undo and game time.
+  Event schema regenerated (`20261001211833_event_schema`).
+- **Heat map colours.** One violet, darker with FG%, so a section never reads as a team colour
+  (orange/blue) or make/miss (green/red). Strength by attempts as before.
+- **Admin live score.** The game page re-reads the log every 5 s while the game is unlocked (score,
+  phase pill, corrections list, box-score line). Polling, not realtime: enough for an admin page.
+- e2e: starter picks survive control moving to the Clock phone; the admin heading follows a new basket.
