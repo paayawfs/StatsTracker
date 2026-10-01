@@ -71,6 +71,22 @@ describe('outbox', () => {
     expect(net.server).toHaveLength(7);
   });
 
+  test('a backlog goes up in one request, not one per event', async () => {
+    const net = new SimNetwork();
+    const { sync, t } = await client(net, 'A');
+    await net.settle();
+    t.setOnline(false);
+    await net.settle();
+    startGame(sync);
+    for (let i = 0; i < 30; i++) sync.record(shot(sync));
+    const persist = vi.spyOn(t, 'persist');
+    t.setOnline(true);
+    await net.settle();
+    expect(net.server).toHaveLength(32);
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(sync.log.events.every((e) => e.seq !== null)).toBe(true);
+  });
+
   test('a reload while offline restores state and still sends the outbox', async () => {
     const net = new SimNetwork();
     const first = await client(net, 'A');

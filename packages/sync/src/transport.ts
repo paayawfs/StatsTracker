@@ -9,8 +9,11 @@ export interface SyncTransport {
   connect(handlers: TransportHandlers): void;
   /** Fast path: fire-and-forget to peers. Never awaited on the tap path. */
   broadcast(message: PeerMessage): void;
-  /** Durable path. Resolves with the canonical seq. Throws `Rejected` or `NetworkError`. */
-  persist(event: GameEvent): Promise<number>;
+  /**
+   * Durable path for a batch, in order. Resolves with each event's canonical seq, or `Rejected`
+   * for an event the server refused (the others still go in). Throws `NetworkError`.
+   */
+  persist(events: GameEvent[]): Promise<(number | Rejected)[]>;
   /** Durable events with seq > afterSeq, in seq order. Throws `NetworkError`. */
   fetchSince(afterSeq: number): Promise<GameEvent[]>;
   /** Server clock in epoch ms. Throws `NetworkError`. */

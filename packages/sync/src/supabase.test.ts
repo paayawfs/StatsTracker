@@ -14,15 +14,15 @@ const event = {} as GameEvent;
 
 describe('SupabaseTransport error classification', () => {
   test.each([400, 403, 404, 409])('%i is a rejection (do not retry)', async (status) => {
-    await expect(stub(err(status)).persist(event)).rejects.toBeInstanceOf(Rejected);
+    await expect(stub(err(status)).persist([event])).rejects.toBeInstanceOf(Rejected);
   });
 
   test.each([0, 401, 408, 429, 500, 503])('%i is a network error (retry)', async (status) => {
-    await expect(stub(err(status)).persist(event)).rejects.toBeInstanceOf(NetworkError);
+    await expect(stub(err(status)).persist([event])).rejects.toBeInstanceOf(NetworkError);
   });
 
   test('a thrown fetch is a network error', async () => {
-    await expect(stub(async () => { throw new TypeError('fetch failed'); }).persist(event)).rejects.toBeInstanceOf(NetworkError);
+    await expect(stub(async () => { throw new TypeError('fetch failed'); }).persist([event])).rejects.toBeInstanceOf(NetworkError);
   });
 
   test('a request that never answers times out as a network error (retry later)', async () => {
@@ -35,12 +35,21 @@ describe('SupabaseTransport error classification', () => {
       },
     } as unknown as SupabaseClient, 'g');
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => AbortSignal.abort());
-    await expect(t.persist(event)).rejects.toBeInstanceOf(NetworkError);
+    await expect(t.persist([event])).rejects.toBeInstanceOf(NetworkError);
     timeout.mockRestore();
   });
 
+  test('a batch: seqs in order, and a refused event as Rejected with its code', async () => {
+    const calls: unknown[] = [];
+    const t = new SupabaseTransport(client(async (...a: unknown[]) => (calls.push(a), { data: [{ seq: 7 }, { code: '42501', message: 'no' }], error: null, status: 200 })), 'g');
+    const [ok, refused] = await t.persist([event, event]);
+    expect(ok).toBe(7);
+    expect(refused).toMatchObject({ code: '42501' });
+    expect(calls).toEqual([['insert_events', { events: [event, event] }]]);
+  });
+
   test('rejection keeps the Postgres error code', async () => {
-    await expect(stub(err(403, '42501')).persist(event)).rejects.toMatchObject({ code: '42501' });
+    await expect(stub(err(403, '42501')).persist([event])).rejects.toMatchObject({ code: '42501' });
   });
 
   test('fetchSince pages until a short page', async () => {
@@ -62,7 +71,7 @@ describe('SupabaseViewerTransport (read-only)', () => {
   test('persist is always refused; nothing is ever broadcast', async () => {
     const calls: unknown[] = [];
     const t = new SupabaseViewerTransport(client(async (...a: unknown[]) => (calls.push(a), { data: [], error: null, status: 200 })), 'slug1');
-    await expect(t.persist({} as GameEvent)).rejects.toBeInstanceOf(Rejected);
+    await expect(t.persist([{} as GameEvent])).rejects.toBeInstanceOf(Rejected);
     t.broadcast({ kind: 'discard', eventId: 'x' });
     expect(calls).toEqual([]);
   });

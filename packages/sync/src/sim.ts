@@ -155,18 +155,20 @@ export class SimTransport implements SyncTransport {
     }
   }
 
-  persist(e: GameEvent): Promise<number> {
+  persist(events: GameEvent[]): Promise<(number | Rejected)[]> {
     return new Promise((resolve, reject) => {
       if (!this.online) return this.net.schedule(() => reject(new NetworkError('offline')));
       this.net.schedule(() => {
-        let seq: number;
-        try {
-          seq = this.net.apply(structuredClone(e));
-        } catch (err) {
-          return this.net.schedule(() => reject(err));
-        }
+        const results = events.map((e) => {
+          try {
+            return this.net.apply(structuredClone(e));
+          } catch (err) {
+            if (err instanceof Rejected) return err;
+            throw err;
+          }
+        });
         const lost = !this.online || this.net.random() < this.net.conditions.lostAck;
-        this.net.schedule(() => (lost ? reject(new NetworkError('response lost')) : resolve(seq)));
+        this.net.schedule(() => (lost ? reject(new NetworkError('response lost')) : resolve(results)));
       });
     });
   }

@@ -10,7 +10,7 @@ const PAGE = 1000;
 
 /**
  * Fast path: Realtime Broadcast on the private `game:<id>` channel. Durable path: the
- * `insert_event` RPC; the database broadcasts the durable copy on the same channel.
+ * `insert_events` RPC (a batch); the database broadcasts the durable copies on the same channel.
  */
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -48,9 +48,10 @@ export class SupabaseTransport implements SyncTransport {
     void this.channel?.send({ type: 'broadcast', event: m.kind, payload }).catch(() => {});
   }
 
-  async persist(event: GameEvent): Promise<number> {
+  async persist(events: GameEvent[]): Promise<(number | Rejected)[]> {
     if (this.options.readOnly) throw new Rejected('42501', 'read-only viewer');
-    return Number(await this.call('insert_event', { event }));
+    const results = (await this.call('insert_events', { events })) as ({ seq: number } | { code: string; message: string })[];
+    return results.map((r) => ('seq' in r ? Number(r.seq) : new Rejected(r.code, r.message)));
   }
 
   async fetchSince(afterSeq: number): Promise<GameEvent[]> {
@@ -78,8 +79,8 @@ export class SupabaseTransport implements SyncTransport {
   private async call(fn: string, args: object): Promise<unknown> {
     let res;
     try {
-      // A stalled mobile connection can leave a request hanging for minutes, and the outbox sends
-      // one at a time: give up after 10 s and retry (inserts are idempotent by event id).
+      // A stalled mobile connection can leave a request hanging for minutes, and the outbox waits
+      // for each batch: give up after 10 s and retry (inserts are idempotent by event id).
       res = await this.client.rpc(fn, args).abortSignal(AbortSignal.timeout(REQUEST_TIMEOUT_MS));
     } catch (err) {
       throw new NetworkError(String(err));

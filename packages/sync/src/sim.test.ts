@@ -24,18 +24,22 @@ describe('SimNetwork', () => {
     const net = new SimNetwork();
     const t = net.transport();
     const e = event();
-    const seqs = Promise.all([t.persist(e), t.persist(event()), t.persist(e)]);
+    const seqs = Promise.all([t.persist([e]), t.persist([event()]), t.persist([e])]);
     await net.settle();
-    expect(await seqs).toEqual([1, 2, 1]);
+    expect(await seqs).toEqual([[1], [2], [1]]);
     expect(net.server).toHaveLength(2);
   });
 
-  test('server rejection surfaces as Rejected', async () => {
+  test('a refused event comes back as Rejected; the rest of the batch still goes in', async () => {
     const net = new SimNetwork();
-    net.rejectIf = () => 'nope';
-    const p = net.transport().persist(event()).catch((e: unknown) => e);
+    const bad = event();
+    net.rejectIf = (e) => (e.id === bad.id ? 'nope' : null);
+    const p = net.transport().persist([event(), bad, event()]);
     await net.settle();
-    expect(await p).toBeInstanceOf(Rejected);
+    const [a, b, c] = await p;
+    expect([a, c]).toEqual([1, 2]);
+    expect(b).toBeInstanceOf(Rejected);
+    expect(net.server).toHaveLength(2);
   });
 
   test('durable events fan out to every online client, including the writer', async () => {
@@ -46,7 +50,7 @@ describe('SimNetwork', () => {
     b.connect(rb.handlers);
     c.connect(rc.handlers);
     c.setOnline(false);
-    void a.persist(event());
+    void a.persist([event()]);
     await net.settle();
     expect(ra.got.events).toHaveLength(1);
     expect(rb.got.events).toMatchObject([{ seq: 1 }]);
@@ -80,7 +84,7 @@ describe('SimNetwork', () => {
 
   test('lost ack: persist fails with NetworkError but the server has the event', async () => {
     const net = new SimNetwork({ minDelay: 1, maxDelay: 1, drop: 0, duplicate: 0, lostAck: 1 });
-    const p = net.transport().persist(event()).catch((e: unknown) => e);
+    const p = net.transport().persist([event()]).catch((e: unknown) => e);
     await net.settle();
     expect(await p).toBeInstanceOf(NetworkError);
     expect(net.server).toHaveLength(1);
@@ -93,7 +97,7 @@ describe('SimNetwork', () => {
     t.connect(r.handlers);
     await net.settle();
     t.setOnline(false);
-    const results = Promise.allSettled([t.persist(event()), t.fetchSince(0), t.serverTime()]);
+    const results = Promise.allSettled([t.persist([event()]), t.fetchSince(0), t.serverTime()]);
     await net.settle();
     expect((await results).map((x) => x.status)).toEqual(['rejected', 'rejected', 'rejected']);
     expect(r.got.status).toEqual(['online', 'offline']);
@@ -102,7 +106,7 @@ describe('SimNetwork', () => {
   test('fetchSince returns durable events after a seq', async () => {
     const net = new SimNetwork();
     const t = net.transport();
-    for (let i = 0; i < 3; i++) void t.persist(event());
+    for (let i = 0; i < 3; i++) void t.persist([event()]);
     await net.settle();
     const p = t.fetchSince(1);
     await net.settle();

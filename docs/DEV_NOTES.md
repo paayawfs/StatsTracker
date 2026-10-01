@@ -1277,3 +1277,14 @@ viewer jargon (OR/DR/EFF, /40); admin unlock, rename/delete, live score on the a
 - **"Last, First" names (user decision).** Pasted lines and CSV full-name columns with one comma are
   stored first name first: "Mensah, Kofi" -> "Kofi Mensah" (`firstLast` in logic/names.ts).
 - Free throws owed at the buzzer were done in the backlog round.
+
+## Batched outbox (2026-10-02)
+
+Found by replaying the 2024 NBA Finals Game 5 (ESPN play-by-play) through the live scorer: the outbox
+sent one `insert_event` per round trip (Accra -> London), so a fast burst built a backlog and the
+viewer ran minutes behind. Now `SyncTransport.persist` takes a batch: `GameSync.flush` sends up to 100
+waiting events per request through `insert_events(events jsonb)` (migration
+`20261002090000_insert_events`, pgTAP `13_insert_events`). Each event still goes through
+`insert_event` (schema, authority, idempotency, seq) in its own subtransaction, so a refused event
+comes back as `{code, message}` and the rest go in. A 30-event backlog is one request (sync test).
+Pushed to hosted 2026-10-02.

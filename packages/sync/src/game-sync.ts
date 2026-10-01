@@ -6,6 +6,8 @@ type Timer = (fn: () => void, ms: number, kind: 'retry' | 'poll') => void;
 
 /** A peer's fast-path event not made durable this long after a catch-up is dropped (it was refused, or the discard was missed). */
 export const PEER_GRACE_MS = 30_000;
+/** Events per persist request. */
+const BATCH = 100;
 
 export interface GameSyncOptions {
   gameId: string;
@@ -206,26 +208,34 @@ export class GameSync {
     if (stale.length) this.onChange();
   }
 
-  /** Send the outbox in order, one at a time. Stops at the first network failure. */
+  /**
+   * Send the outbox in order, in batches: one round trip for everything waiting (a backlog after a
+   * dead spot drains in seconds, not one trip per event). Stops at the first network failure.
+   */
   private async flush() {
     if (this.flushing || !this.online || this.closed) return;
     this.flushing = true;
     try {
       while (this.online && this.pending.length) {
-        const e = this.pending[0]!;
+        const batch = this.pending.slice(0, BATCH);
+        let results: (number | Rejected)[];
         try {
-          const seq = await this.transport.persist(e);
-          this.apply({ ...e, seq });
+          results = await this.transport.persist(batch);
         } catch (err) {
-          if (err instanceof Rejected) {
-            this.reject(e, err.message);
-          } else if (err instanceof NetworkError) {
+          if (err instanceof NetworkError) {
             this.retryLater();
             break;
-          } else {
-            throw err;
           }
+          if (err instanceof Rejected) {
+            // The whole request was refused (e.g. signed out): refuse each, as before.
+            results = batch.map(() => err);
+          } else throw err;
         }
+        batch.forEach((e, i) => {
+          const r = results[i]!;
+          if (r instanceof Rejected) this.reject(e, r.message);
+          else this.apply({ ...e, seq: r });
+        });
       }
     } finally {
       this.flushing = false;
