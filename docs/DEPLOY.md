@@ -1,5 +1,9 @@
 # Deploying to Vercel
 
+Live (2026-10-01): scorer `https://stats-scorer.vercel.app` (admin at `/admin`), viewer
+`https://stats-viewer-mocha.vercel.app`. Vercel projects `stats-scorer` and `stats-viewer`
+(account `paayawfs`), both linked to GitHub, so a push to `main` deploys both.
+
 Two Vercel projects from the one repo (`paayawfs/StatsTracker`), both static Vite builds:
 
 | Project | Root directory | Serves | Env vars |
