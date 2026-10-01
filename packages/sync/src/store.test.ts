@@ -62,4 +62,16 @@ describe('LocalStore', () => {
     await store.put(event({ gameId: 'flush' }));
     expect((await store.load('g1')).map((s) => s.event.id)).toEqual(events.map((e) => e.id).sort());
   });
+
+  test('prune drops old, synced games and keeps the open one and anything unsynced', async () => {
+    await open();
+    const week = 7 * 86_400_000;
+    const now = 10 * week;
+    await store.put(event({ gameId: 'old', seq: 1, wallClock: now - 2 * week }));
+    await store.put(event({ gameId: 'unsynced', deviceId: 'me', wallClock: now - 2 * week }));
+    await store.put(event({ gameId: 'recent', seq: 1, wallClock: now - 1000 }));
+    await store.put(event({ gameId: 'open', seq: 1, wallClock: now - 2 * week }));
+    await store.prune('open', 'me', now);
+    for (const [g, n] of [['old', 0], ['unsynced', 1], ['recent', 1], ['open', 1]] as const) expect(await store.load(g)).toHaveLength(n);
+  });
 });

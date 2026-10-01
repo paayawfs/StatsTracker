@@ -82,6 +82,12 @@ test('admin: set up a league, run a game with a scorer, lock it, export, season 
   await btn(scorer, '2 ✓').click();
   await btn(scorer, 'Skip').click();
   await expect(admin.getByRole('heading', { name: 'Lions 3 – 4 Tigers' })).toBeVisible({ timeout: 10_000 });
+  // Browser Back and Forward move between admin screens; a reload stays put.
+  await admin.goBack();
+  await expect(admin.getByRole('button', { name: 'Lions vs Tigers' })).toBeVisible();
+  await admin.goForward();
+  await admin.reload();
+  await expect(admin.getByRole('heading', { name: 'Lions 3 – 4 Tigers' })).toBeVisible();
 
   // Export CSV.
   const [download] = await Promise.all([admin.waitForEvent('download'), btn(admin, 'Export CSV').click()]);
@@ -164,7 +170,7 @@ test('admin: import a roster CSV, map the columns, preview, import', async ({ br
   await expect(admin.getByText('Added 2 players and 1 new team.')).toBeVisible();
   await expect(admin.getByTestId('team-Lions').getByText('2 players')).toBeVisible();
   await expect(admin.getByTestId('team-Tigers').getByText('1 player', { exact: true })).toBeVisible();
-  await expect(admin.getByTestId('team-Lions').getByText('Boateng, Yaw')).toBeVisible();
+  await expect(admin.getByTestId('team-Lions').getByText('Yaw Boateng')).toBeVisible(); // "Last, First" is stored as "First Last"
 });
 
 test('admin: rename a team, edit and delete players, delete a season', async ({ browser }) => {

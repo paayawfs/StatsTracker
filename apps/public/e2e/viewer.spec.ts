@@ -62,3 +62,26 @@ test('an unknown link shows "not found"', async ({ page }) => {
   await page.goto(`${VIEWER}/g/${'0'.repeat(32)}`);
   await expect(page.getByText('Game not found')).toBeVisible();
 });
+
+test('offline reload: the viewer shows the last score it had', async ({ browser }) => {
+  const g = await createGame();
+  const scorer = await (await browser.newContext({ baseURL: SCORER, viewport: { width: 1180, height: 820 } })).newPage();
+  await joinAndStart(scorer, g.code);
+  await player(scorer, 'A', 4).click();
+  await btn(scorer, '3 ✓').click();
+  await btn(scorer, 'Skip').click();
+
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const viewer = await context.newPage();
+  await viewer.goto(`${VIEWER}/g/${g.slug}`);
+  await expect(viewer.getByTestId('score-A')).toHaveText('3');
+  await viewer.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    while (!navigator.serviceWorker.controller) await new Promise((r) => setTimeout(r, 50));
+  });
+
+  await context.setOffline(true);
+  await viewer.reload();
+  await expect(viewer.getByTestId('score-A')).toHaveText('3');
+  await expect(viewer.getByText(/Lion 4/).first()).toBeVisible();
+});

@@ -52,6 +52,24 @@ test('a full single-mode sequence: shots, assist, rebound, foul + free throws, s
   await expect(player(page, 'A', 8)).toBeVisible();
   await expect(player(page, 'A', 9)).toHaveCount(0);
 
+  // A made shot and its assist are one action: one undo takes both.
+  await player(page, 'A', 5).click();
+  await btn(page, '2 ✓').click();
+  await player(page, 'A', 6).click();
+  await expect(scoreA).toHaveText('6');
+  await page.getByTestId('undo').click();
+  await expect(scoreA).toHaveText('4');
+  await expect(page.getByText(/Undone: .*Lion 5/)).toBeVisible();
+
+  // Block from the rebound prompt, then the rebound.
+  await player(page, 'B', 5).click();
+  await btn(page, '2 ✗').click();
+  await page.locator('.prompt').getByRole('button', { name: 'BLK' }).click();
+  await expect(page.getByText('Blocked by? Tap the defender.')).toBeVisible();
+  await player(page, 'A', 6).click();
+  await expect(page.getByText('Rebound? Tap the player or Team REB.')).toBeVisible();
+  await player(page, 'A', 7).click();
+
   // End the period and reconcile against the scoreboard.
   await menu(page, 'End period');
   await expect(page.getByText('End of period 1')).toBeVisible();

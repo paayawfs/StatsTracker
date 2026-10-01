@@ -1253,3 +1253,27 @@ viewer jargon (OR/DR/EFF, /40); admin unlock, rename/delete, live score on the a
 - **Admin live score.** The game page re-reads the log every 5 s while the game is unlocked (score,
   phase pill, corrections list, box-score line). Polling, not realtime: enough for an admin page.
 - e2e: starter picks survive control moving to the Clock phone; the admin heading follows a new basket.
+
+## QA round 1 leftovers (2026-10-01)
+
+- **Admin Back/reload.** Admin screens live in the URL hash (`#<league>`, `#<league>/<section>`,
+  `#<league>/game/<id>`) read through a `route` signal: browser Back/Forward move between screens and
+  a reload stays put. No router.
+- **Rule-set messages.** `ruleSetProblem` maps schema paths to the form labels: "Periods must be at
+  least 1", "Period length must be more than 0 minutes", "Name is required".
+- **BLK from the rebound prompt.** The prompt shows BLK (defence's phone, last attempt an unblocked
+  missed shot, not a free throw) -> "Blocked by? Tap the defender." -> amends the shot -> back to the
+  rebound prompt.
+- **Undo per action.** `undoLast` returns every correction for the last action: a play plus a follow-up
+  that only added assist/block/steal (my own play: void it; someone else's: take my follow-up off), and
+  one tap's events (offensive foul + turnover, clockStop + timeout), grouped by wall clocks within 5 ms.
+- **Viewer offline reload.** Viewer service worker (copy of the scorer's, cache `viewer-v1`); the
+  `public_game` row is kept in localStorage per slug and used when the RPC fails; events come from
+  IndexedDB as before.
+- **IndexedDB pruning.** `LocalStore.prune(keep, deviceId)` on open (scorer and viewer): other games go
+  once their newest event is a week old, unless this device still has unsynced events there.
+- **Sub overlay at 1180 with 12-man rosters.** Checked at 1180x820, 1024x600 and 844x390: the card sits
+  in the stage and all 12 bench chips stay visible. Already fixed by the rail layout work; no change.
+- **"Last, First" names (user decision).** Pasted lines and CSV full-name columns with one comma are
+  stored first name first: "Mensah, Kofi" -> "Kofi Mensah" (`firstLast` in logic/names.ts).
+- Free throws owed at the buzzer were done in the backlog round.

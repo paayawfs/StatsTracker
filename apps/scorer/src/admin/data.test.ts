@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { fillJerseys, newPlayersProblem, parsePlayers } from './data';
+import { FIBA } from '@stats/core';
+import { fillJerseys, newPlayersProblem, parsePlayers, ruleSetProblem } from './data';
 
 describe('parsePlayers (pasted roster lines)', () => {
   test('jersey then name, in common formats', () => {
@@ -47,4 +48,21 @@ describe('fillJerseys', () => {
     ]);
     expect(r.map((x) => x.jersey)).toEqual(['0', '7', '1', '2', '7']);
   });
+});
+
+describe('ruleSetProblem', () => {
+  test('names the form field', () => {
+    expect(ruleSetProblem(FIBA)).toBeNull();
+    expect(ruleSetProblem({ ...FIBA, periods: 0, timeouts: [] })).toBe('Periods must be at least 1');
+    expect(ruleSetProblem({ ...FIBA, periodLengthMs: 0 })).toBe('Period length must be more than 0 minutes');
+    expect(ruleSetProblem({ ...FIBA, teamFoulBonus: { ...FIBA.teamFoulBonus, freeThrows: 1.5 } })).toBe('Bonus free throws must be a whole number');
+    expect(ruleSetProblem({ ...FIBA, name: '' })).toBe('Name is required');
+  });
+});
+
+test('pasted "Last, First" is stored as "First Last"', () => {
+  expect(parsePlayers('23 Mensah, Kofi\nOfori, Ama')).toEqual([
+    { name: 'Kofi Mensah', default_jersey: '23' },
+    { name: 'Ama Ofori', default_jersey: null },
+  ]);
 });

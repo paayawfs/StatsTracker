@@ -2,6 +2,7 @@ import { signal } from '@preact/signals';
 import { FIBA, GameLog, parseEvent, RuleSetSchema, type EventBody, type GameEvent, type RuleSet, type Team } from '@stats/core';
 import { createClient, type User } from '@supabase/supabase-js';
 import * as v from 'valibot';
+import { firstLast } from '../logic/names';
 
 const LOCAL_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
@@ -88,7 +89,7 @@ export function parsePlayers(text: string): { name: string; default_jersey: stri
     .filter(Boolean)
     .map((l) => {
       const m = l.match(/^#?(\d{1,2})\s*[-.,:]?\s+(.+)$/);
-      return m ? { name: m[2]!.trim(), default_jersey: m[1]! } : { name: l, default_jersey: null };
+      return m ? { name: firstLast(m[2]!), default_jersey: m[1]! } : { name: firstLast(l), default_jersey: null };
     });
 }
 /** Why these new players can't join a team that already has `existing`, or null. */
@@ -141,10 +142,33 @@ export function fillJerseys<T extends { team: string; jersey: string | null }>(r
 }
 
 export const ruleSets = async (league: string) => must(await db.from('rule_sets').select('id, name, rules').eq('league_id', league).order('name')) as RuleSetRow[];
-export async function saveRuleSet(league: string, rules: RuleSet, id?: string) {
+/** Rule-set form labels by schema path, so a problem names the field to fix. */
+const RULE_FIELDS: Record<string, string> = {
+  name: 'Name', periods: 'Periods', periodLengthMs: 'Period length', overtimeLengthMs: 'Overtime length',
+  personalFoulLimit: 'Personal fouls to foul out', 'teamFoulBonus.threshold': 'Team fouls before bonus',
+  'teamFoulBonus.freeThrows': 'Bonus free throws', overtimeTimeouts: 'Overtime timeouts',
+};
+
+/** What's wrong with a rule set, in the form's words, or null. */
+export function ruleSetProblem(rules: RuleSet): string | null {
   const parsed = v.safeParse(RuleSetSchema, rules);
-  if (!parsed.success) throw new Error(parsed.issues.map((i) => i.message).join('; '));
-  const row = { league_id: league, name: rules.name, rules: parsed.output };
+  if (parsed.success) return null;
+  return parsed.issues.map((i) => {
+    const path = v.getDotPath(i);
+    if (!path) return i.message;
+    const label = RULE_FIELDS[path] ?? path;
+    if (path === 'name') return 'Name is required';
+    if (i.type === 'min_value') return path.endsWith('Ms') ? `${label} must be more than 0 minutes` : `${label} must be at least ${String(i.requirement)}`;
+    if (i.type === 'integer') return `${label} must be a whole number`;
+    return `${label}: ${i.message}`;
+  }).join('; ');
+}
+
+export async function saveRuleSet(league: string, rules: RuleSet, id?: string) {
+  const problem = ruleSetProblem(rules);
+  if (problem) throw new Error(problem);
+  const parsed = v.parse(RuleSetSchema, rules);
+  const row = { league_id: league, name: rules.name, rules: parsed };
   return must(id ? await db.from('rule_sets').update(row).eq('id', id).select().single() : await db.from('rule_sets').insert(row).select().single());
 }
 export { FIBA };

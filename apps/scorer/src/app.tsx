@@ -3,7 +3,7 @@ import { describe as describeEvent, formatClock, FOUL_KINDS, remaining, shotZone
 import { Avatar, Court, snapToSection, toScreen } from '@stats/ui';
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
-import type { Input } from './logic/entry';
+import { blockableShot, type Input } from './logic/entry';
 import { chipLabels } from './logic/names';
 import {
   can, checkpoint, claim, clockNow, correct, endGame, endPeriod, entry, events, info, input, join, leave, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
@@ -316,7 +316,14 @@ function Stage() {
       overlay = <Prompt text="Assist? Tap the passer." />;
       break;
     case 'rebound':
-      overlay = <Prompt text="Rebound? Tap the player or Team REB." />;
+      overlay = (
+        <Prompt text="Rebound? Tap the player or Team REB.">
+          {can.value.team(other(e.shooterTeam)) && blockableShot(events.value) && <button {...send({ kind: 'block' })}>BLK</button>}
+        </Prompt>
+      );
+      break;
+    case 'block':
+      overlay = <Prompt text="Blocked by? Tap the defender." />;
       break;
     case 'steal':
       overlay = <Prompt text="Steal? Tap the defender." />;
@@ -443,10 +450,11 @@ function ShotCourt({ dim, active }: { dim: boolean; active: boolean }) {
   );
 }
 
-function Prompt({ text }: { text: string }) {
+function Prompt({ text, children }: { text: string; children?: ComponentChildren }) {
   return (
     <div class="card prompt">
       <p class="card-title">{text}</p>
+      {children}
       <button {...send({ kind: 'skip' })}>Skip</button>
     </div>
   );

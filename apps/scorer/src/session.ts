@@ -149,6 +149,7 @@ async function open(gameInfo: GameInfo) {
   stopTimers();
   const store = await LocalStore.open();
   sync = await GameSync.open({ gameId: gameInfo.gameId, deviceId: deviceId(), transport: new SupabaseTransport(supabase, gameInfo.gameId), store });
+  void store.prune(gameInfo.gameId, deviceId());
   const s = sync;
   let lastSeen = s.log.events.at(-1)?.id;
   let prevRoles = heldRoles(s.log.state, s.deviceId);
@@ -342,12 +343,12 @@ export function undo() {
   }
   const u = undoLast(sync.log, sync.deviceId, undone);
   if (!u) return;
-  const target = sync.log.get(u.undoes);
+  const target = sync.log.get(u.undoes.at(-1)!);
   if (target) notice.value = `Undone: ${describeEvent(target, (id) => { const p = id ? playersById.value.get(id) : undefined; return p ? `#${p.jersey} ${p.name}` : 'team'; }, info.value?.teams)}`;
-  const marker = stamp(u.body);
-  undone.add(u.undoes).add(marker.id);
+  const markers = u.bodies.map((b) => stamp(b));
+  for (const id of [...u.undoes, ...markers.map((m) => m.id)]) undone.add(id);
   localStorage.setItem(undoneKey(sync.gameId), JSON.stringify([...undone]));
-  sync.record(marker);
+  for (const m of markers) sync.record(m);
   entry.value = idle;
 }
 

@@ -13,6 +13,7 @@ export type Entry =
   | { step: 'shotResult'; player: string; x: number; y: number; value: 2 | 3 }
   | { step: 'assist'; shot: Shot }
   | { step: 'rebound'; shooterTeam: Team }
+  | { step: 'block'; shooterTeam: Team; shot: Shot }
   | { step: 'turnoverKind'; team: Team; player?: string }
   | { step: 'steal'; turnover: Turnover }
   | { step: 'foulKind'; team: Team; player: string }
@@ -63,6 +64,12 @@ function lastOf<T extends GameEvent>(events: readonly GameEvent[], match: (e: Ga
 const isShot = (e: GameEvent): e is Shot => e.type === 'shot';
 const isTurnover = (e: GameEvent): e is Turnover => e.type === 'turnover';
 const isAttempt = (e: GameEvent): e is Shot | EventOf<'freeThrow'> => e.type === 'shot' || e.type === 'freeThrow';
+
+/** At the rebound prompt: the missed shot a block can still go on (the last attempt, not a free throw). */
+export function blockableShot(events: readonly GameEvent[]): Shot | undefined {
+  const last = lastOf(events, isAttempt);
+  return last?.type === 'shot' && !last.payload.made && !last.payload.block ? last : undefined;
+}
 
 function foulBody(f: FoulDraft & { offender: 'player' } & { freeThrows: number }): PlayBody;
 function foulBody(f: { team: Team; offender: 'coach' | 'bench'; kind: FoulKind; freeThrows: number }): PlayBody;
@@ -182,8 +189,18 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
         emit({ type: 'rebound', payload: { team: input.team, kind: kind(input.team) } });
         return done();
       }
+      const shot = blockableShot(ctx.events);
+      if (input.kind === 'block' && shot && canTeam(other(entry.shooterTeam))) return done({ step: 'block', shooterTeam: entry.shooterTeam, shot });
       break;
     }
+    case 'block':
+      // The blocker, then back to the rebound.
+      if (input.kind === 'player' && teamOf(input.id) === other(entry.shooterTeam) && onFloor(input.id)) {
+        amend(entry.shot, { block: input.id });
+        return done({ step: 'rebound', shooterTeam: entry.shooterTeam });
+      }
+      if (input.kind === 'skip') return done({ step: 'rebound', shooterTeam: entry.shooterTeam });
+      break;
     case 'steal':
       if (input.kind === 'player' && teamOf(input.id) === other(entry.turnover.payload.team) && onFloor(input.id)) {
         amend(entry.turnover, { steal: input.id });

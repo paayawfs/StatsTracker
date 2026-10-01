@@ -41,23 +41,29 @@ export const plays = computed(() => playByPlay(events.value, who, loaded()?.team
 
 /** Load a game by its public slug and follow it live. Read-only: viewers never write. */
 export async function open(slug: string) {
+  const key = `viewer.game.${slug}`;
   const { data, error } = await supabase.rpc('public_game', { slug });
-  if (error) {
+  // Offline (e.g. a reload with no network): the last copy of the game; events come from IndexedDB.
+  const cached = error ? (JSON.parse(localStorage.getItem(key) ?? 'null') as PublicGame | null) : null;
+  if (error && !cached) {
     // The server or the network, not the link: say so and keep trying.
     game.value = 'unreachable';
     setTimeout(() => void open(slug), 5000);
     return;
   }
-  if (!data) {
+  if (!data && !cached) {
     game.value = 'missing';
     return;
   }
-  const g = data as PublicGame;
+  const g = (data ?? cached) as PublicGame;
+  if (data) localStorage.setItem(key, JSON.stringify(data));
+  const store = await LocalStore.open('stats-viewer');
+  void store.prune(g.gameId, ''); // viewers never write: nothing of theirs is unsynced
   const sync = await GameSync.open({
     gameId: g.gameId,
     deviceId: `viewer-${crypto.randomUUID()}`,
     transport: new SupabaseViewerTransport(supabase, slug),
-    store: await LocalStore.open('stats-viewer'),
+    store,
     pollMs: 30_000, // many viewers: poll less than scorers do
   });
   const refresh = () => {

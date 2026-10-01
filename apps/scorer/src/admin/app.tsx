@@ -1,4 +1,4 @@
-import { useSignal } from '@preact/signals';
+import { signal, useSignal } from '@preact/signals';
 import { boxScore, describe, eventsCsv, FIBA, formatClock, NBA, rescaleTimeouts, seasonTotals, summarize, type GameEvent, type GameLog, type RuleSet } from '@stats/core';
 import type { ComponentChildren } from 'preact';
 import { Avatar, photoFromFile } from '@stats/ui';
@@ -91,6 +91,11 @@ function Editable({ label, name, jersey, children, onSave, onDelete, deleteNote 
   );
 }
 
+// ponytail: hash routes (#league, #league/section, #league/game/<id>) so Back and reload work; no router.
+const route = signal(location.hash.slice(1));
+addEventListener('hashchange', () => (route.value = location.hash.slice(1)));
+const go = (to: string) => void (location.hash = to);
+
 export function Admin() {
   if (!user.value) return <SignIn />;
   return <Leagues />;
@@ -124,11 +129,13 @@ function SignIn() {
 }
 
 function Leagues() {
-  const current = useSignal<League | null>(null);
   const { data, error, reload } = useLoad(leagues, []);
   const name = useSignal('');
   const act = useAction();
-  if (current.value) return <LeaguePage league={current.value} back={() => (current.value = null)} />;
+  const [leagueId, part, gameId] = route.value.split('/');
+  const current = data?.find((l) => l.id === leagueId);
+  if (current) return <LeaguePage league={current} part={part} gameId={gameId} />;
+  if (leagueId && !data && !error) return null;
   return (
     <div class="admin">
       <header class="admin-top">
@@ -140,7 +147,7 @@ function Leagues() {
       <ul class="list">
         {data?.map((l) => (
           <li key={l.id}>
-            <button class="link-row" onClick={() => (current.value = l)}>{l.name}</button>
+            <button class="link-row" onClick={() => go(l.id)}>{l.name}</button>
           </li>
         ))}
         {data?.length === 0 && <li class="small">No leagues yet. Create your first one below.</li>}
@@ -154,28 +161,27 @@ function Leagues() {
   );
 }
 
-function LeaguePage({ league, back }: { league: League; back: () => void }) {
-  const section = useSignal<Section>('games');
-  const openGame = useSignal<string | null>(null);
+function LeaguePage({ league, part, gameId }: { league: League; part?: string; gameId?: string }) {
   const tabs: [Section, string][] = [['games', 'Games'], ['teams', 'Teams & players'], ['seasons', 'Seasons'], ['rules', 'Rule sets'], ['stats', 'Season stats'], ['admins', 'Admins']];
-  if (openGame.value) return <GamePage league={league} gameId={openGame.value} back={() => (openGame.value = null)} />;
+  const section = tabs.find(([s]) => s === part)?.[0] ?? 'games';
+  if (part === 'game' && gameId) return <GamePage league={league} gameId={gameId} back={() => go(`${league.id}/games`)} />;
   return (
     <div class="admin">
       <header class="admin-top">
-        <button onClick={back}>‹ Leagues</button>
+        <button onClick={() => go('')}>‹ Leagues</button>
         <h1>{league.name}</h1>
       </header>
       <nav class="admin-tabs">
         {tabs.map(([s, label]) => (
-          <button key={s} class={section.value === s ? 'on' : ''} onClick={() => (section.value = s)}>{label}</button>
+          <button key={s} class={section === s ? 'on' : ''} onClick={() => go(`${league.id}/${s}`)}>{label}</button>
         ))}
       </nav>
-      {section.value === 'games' && <Games league={league} open={(id) => (openGame.value = id)} />}
-      {section.value === 'teams' && <Teams league={league} />}
-      {section.value === 'seasons' && <Seasons league={league} />}
-      {section.value === 'rules' && <Rules league={league} />}
-      {section.value === 'stats' && <SeasonStats league={league} />}
-      {section.value === 'admins' && <Admins league={league} />}
+      {section === 'games' && <Games league={league} open={(id) => go(`${league.id}/game/${id}`)} />}
+      {section === 'teams' && <Teams league={league} />}
+      {section === 'seasons' && <Seasons league={league} />}
+      {section === 'rules' && <Rules league={league} />}
+      {section === 'stats' && <SeasonStats league={league} />}
+      {section === 'admins' && <Admins league={league} />}
     </div>
   );
 }

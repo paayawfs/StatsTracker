@@ -72,6 +72,23 @@ describe('shots', () => {
     expect((r.emitted.at(-1)!.payload as { player?: string }).player).toBeUndefined();
   });
 
+  test('BLK from the rebound prompt: name the blocker, then back to the rebound', () => {
+    const r = run(p('a1'), { kind: 'shot', value: 2, made: false }, { kind: 'block' });
+    expect(r.entry).toMatchObject({ step: 'block', shooterTeam: 'A' });
+    const teammate = run(p('a1'), { kind: 'shot', value: 2, made: false }, { kind: 'block' }, p('a2'));
+    expect(teammate.entry).toEqual({ step: 'player', player: 'a2' }); // not a blocker: like any prompt, the tap moves on
+    expect(teammate.emitted).toHaveLength(1);
+    const done = run(p('a1'), { kind: 'shot', value: 2, made: false }, { kind: 'block' }, p('b3'), p('b2'));
+    expect(done.emitted[1]).toMatchObject({ type: 'amend', payload: { body: { payload: { shooter: 'a1', block: 'b3' } } } });
+    expect(done.emitted[2]).toMatchObject({ type: 'rebound', payload: { team: 'B', player: 'b2', kind: 'defensive' } });
+    expect(done.state.score).toEqual({ A: 0, B: 0 });
+  });
+
+  test('no BLK after a missed free throw', () => {
+    const r = run(p('a1'), { kind: 'foul' }, { kind: 'foulKind', value: 'shooting' }, p('b1'), { kind: 'ftCount', n: 1 }, { kind: 'ft', made: false }, { kind: 'block' });
+    expect(r.entry).toEqual({ step: 'rebound', shooterTeam: 'B' });
+  });
+
   test('court tap sets location and suggested value, then made/miss', () => {
     const r = run(p('a1'), { kind: 'court', x: 0.5, y: 0.9 }, { kind: 'result', made: false });
     expect(r.emitted[0]).toMatchObject({ type: 'shot', payload: { shooter: 'a1', value: 3, made: false, x: 0.5, y: 0.9 } });

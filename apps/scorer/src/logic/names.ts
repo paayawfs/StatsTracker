@@ -20,3 +20,6 @@ export function chipLabels(players: readonly { id: string; name: string; team: s
   for (const p of players) if (!labels.has(p.id)) labels.set(p.id, p.name.trim());
   return labels;
 }
+
+/** "Mensah, Kofi" -> "Kofi Mensah"; anything else as typed (spaces tidied). */
+export const firstLast = (name: string) => name.replace(/^([^,]+),\s*([^,]+)$/, '$2 $1').trim().replace(/\s+/g, ' ');

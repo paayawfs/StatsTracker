@@ -1,4 +1,5 @@
 /** Roster import from CSV: parse, guess the column mapping, then plan what the import will do. */
+import { firstLast } from '../logic/names';
 
 export interface Csv {
   headers: string[];
@@ -97,7 +98,7 @@ export function planImport(
   const cell = (r: string[], i: number | null) => (i === null ? '' : (r[i] ?? '').trim());
 
   const out = rows.map((r): PlanRow => {
-    const name = (m.name !== null ? cell(r, m.name) : [cell(r, m.first), cell(r, m.last)].filter(Boolean).join(' ')).replace(/\s+/g, ' ');
+    const name = m.name !== null ? firstLast(cell(r, m.name)) : [cell(r, m.first), cell(r, m.last)].filter(Boolean).join(' ').replace(/\s+/g, ' ');
     const jerseyRaw = cell(r, m.jersey).replace(/^#\s*/, '');
     const teamRaw = m.team !== null ? cell(r, m.team) : (target?.name ?? '');
     const existing = teamRaw ? byName.get(key(teamRaw)) : undefined;
