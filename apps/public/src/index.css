@@ -28,7 +28,7 @@ small, .small { color: var(--muted); font-size: 0.8rem; }
 
 .viewer { max-width: 1100px; margin: auto; }
 .board {
-  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 2; /* above the tables' sticky name column */ display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px;
   padding: 10px 16px; background: var(--surface); box-shadow: var(--shadow);
 }
 .board .team { display: grid; justify-items: center; gap: 2px; min-width: 0; }
