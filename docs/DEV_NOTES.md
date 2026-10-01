@@ -1288,3 +1288,12 @@ waiting events per request through `insert_events(events jsonb)` (migration
 `insert_event` (schema, authority, idempotency, seq) in its own subtransaction, so a refused event
 comes back as `{code, message}` and the rest go in. A 30-event backlog is one request (sync test).
 Pushed to hosted 2026-10-02.
+
+### NBA replay check (2026-10-02)
+
+2024 NBA Finals Game 5 (ESPN event 401656363, 444 plays) replayed tap by tap through the live scorer
+(single mode, NBA rules, shot locations; court spots from ESPN coordinates, 2/3 from
+`pointsAttempted`). Result: 106-88 as in the real game, every quarter score right, 726 events, no
+flags, synced 1 s after the last tap. Box score vs ESPN: 311/325 cells identical; the 14 others are
++/- only, and +/- computed from ESPN's own play order gives exactly our numbers (ESPN orders some
+same-second subs and free throws differently from the official sequence behind its +/-).
