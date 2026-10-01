@@ -108,7 +108,7 @@ function SignIn() {
   const go = (mode: 'in' | 'up') =>
     run(async () => {
       const creds = { email: email.value.trim(), password: password.value };
-      const r = mode === 'in' ? await db.auth.signInWithPassword(creds) : await db.auth.signUp(creds);
+      const r = mode === 'in' ? await db.auth.signInWithPassword(creds) : await db.auth.signUp({ ...creds, options: { emailRedirectTo: `${location.origin}/admin` } });
       if (r.error) throw r.error;
       if (mode === 'up' && !r.data.session) throw new Error('Account created. Confirm it from the email we sent, then sign in.');
     });

@@ -13,7 +13,8 @@ const LOCAL_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1
 export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL ?? 'http://127.0.0.1:54321',
   import.meta.env.VITE_SUPABASE_ANON_KEY ?? LOCAL_ANON,
-  supabaseClientOptions,
+  // Email links (admin sign-up confirmation) are the admin client's; never take them as the scorer session.
+  { ...supabaseClientOptions, auth: { detectSessionInUrl: false } },
 );
 
 export interface Player {
