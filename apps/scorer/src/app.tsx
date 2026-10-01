@@ -1,9 +1,10 @@
-import { useComputed, useSignal } from '@preact/signals';
+import { computed, useComputed, useSignal } from '@preact/signals';
 import { describe as describeEvent, formatClock, FOUL_KINDS, remaining, shotZone, teamFoulCount, timeoutsAllowed, ZONES, type EventOf, type GameEvent, type Role, type Team } from '@stats/core';
 import { Avatar, Court, snapToSection, toScreen } from '@stats/ui';
 import type { ComponentChildren, JSX } from 'preact';
 import { useEffect } from 'preact/hooks';
 import type { Input } from './logic/entry';
+import { chipLabels } from './logic/names';
 import {
   can, checkpoint, claim, clockNow, correct, endGame, endPeriod, entry, events, info, input, join, leave, measureTap, myDevice, myRoles, nextPeriod, notice, now, online, record, release, roleName, takeOver,
   pending, playersById, rejected, resume, setClock, showHelp, startGame, state, tapToRender, toggleClock, typed, undo, type Player,
@@ -27,7 +28,7 @@ const tap = (fn: () => void) => ({
 });
 const send = (i: Input) => tap(() => input(i));
 const other = (t: Team): Team => (t === 'A' ? 'B' : 'A');
-const lastName = (name: string) => name.split(' ').slice(-1)[0] ?? name;
+const chipNames = computed(() => chipLabels(info.value?.players ?? []));
 
 export function App() {
   const ready = useSignal(false);
@@ -141,7 +142,7 @@ function Live() {
       <Rail team="A" />
       <main class="center">
         <TopBar />
-        <div class="stage">{phase === 'live' ? <Stage /> : <Break />}</div>
+        <div class="stage">{phase === 'live' || (phase === 'break' && (entry.value.step !== 'idle' || state.value.freeThrowQueue.length)) ? <Stage /> : <Break />}</div>
       </main>
       <Rail team="B" />
       <Dock menu={() => toggle('menu')} />
@@ -223,6 +224,7 @@ function Rail({ team }: { team: Team }) {
   const ids = subbing.value ? gi.players.filter((p) => p.team === team).map((p) => p.id) : lineup.value.split(',').filter(Boolean);
   const owns = can.value.team(team);
   const live = state.value.phase === 'live';
+  const brk = state.value.phase === 'break';
   return (
     <section class={`rail team-${team}${subbing.value ? ' subbing' : ''}`}>
       <header>
@@ -238,11 +240,11 @@ function Rail({ team }: { team: Team }) {
         Fouls {fouls}
         {bonus.value && <b class="bonus">BONUS</b>} · Timeouts {timeouts}
       </p>
-      {live && (
+      {(live || brk) && (
         <div class="team-actions">
           {owns && rebounding.value && <button class="accent" {...send({ kind: 'team', team })}>Team REB</button>}
-          {can.value.control && <button disabled={timeouts.value <= 0} {...send({ kind: 'timeout', team })} aria-label={`Timeout ${gi.teams[team]}`}>Timeout</button>}
-          {owns && <button {...send({ kind: 'teamTurnover', team })}>Team TO</button>}
+          {can.value.control && live && <button disabled={timeouts.value <= 0} {...send({ kind: 'timeout', team })} aria-label={`Timeout ${gi.teams[team]}`}>Timeout</button>}
+          {owns && live && <button {...send({ kind: 'teamTurnover', team })}>Team TO</button>}
           {owns && <button {...send({ kind: 'benchFoul', team, offender: 'coach' })}>Coach T</button>}
           {owns && <button {...send({ kind: 'benchFoul', team, offender: 'bench' })}>Bench T</button>}
         </div>
@@ -266,7 +268,7 @@ function Chip({ id }: { id: string }) {
     <button class={cls} {...send({ kind: 'player', id })} data-testid={`player-${p.team}-${p.jersey}`} aria-pressed={cls.value.includes(' on')}
       aria-label={`#${p.jersey} ${p.name}${fouls.value ? `, ${fouls.value} foul${fouls.value > 1 ? 's' : ''}` : ''}`}>
       <b>{p.jersey}</b>
-      <span>{lastName(p.name)}</span>
+      <span>{chipNames.value.get(id) ?? p.name}</span>
       {fouls.value > 0 && <i class="pf" aria-label={`${fouls.value} fouls`}>{'•'.repeat(fouls.value)}</i>}
     </button>
   );
@@ -298,7 +300,7 @@ function Stage() {
       const team = state.value.roster[e.player];
       hint =
         team && !can.value.team(team) ? (
-          <>{who(e.player)} · scored on the {gi.teams[team]} phone. Here: BLK, STL or AST.</>
+          <>{who(e.player)} · scored on the {gi.teams[team]} phone</>
         ) : gi.shotLocations ? (
           <>{who(e.player)} · tap the section of the shot</>
         ) : (
@@ -502,8 +504,9 @@ function Dock({ menu }: { menu: () => void }) {
   const team = selected ? state.value.roster[selected] : undefined;
   const owns = !!team && can.value.team(team);
   const live = state.value.phase === 'live';
+  const brk = state.value.phase === 'break';
   const act = (label: string, i: Input, enabled: boolean) => (
-    <button disabled={!live || !enabled} {...send(i)}>
+    <button disabled={!enabled || !(live || (brk && (i.kind === 'foul' || i.kind === 'sub')))} {...send(i)}>
       {label}
     </button>
   );
@@ -511,9 +514,9 @@ function Dock({ menu }: { menu: () => void }) {
     <nav class="dock">
       <div class="dock-actions">
         {act('REB', { kind: 'rebound' }, owns)}
-        {act('AST', { kind: 'assist' }, !!selected)}
-        {act('STL', { kind: 'steal' }, !!selected)}
-        {act('BLK', { kind: 'block' }, !!selected)}
+        {act('AST', { kind: 'assist' }, owns)}
+        {act('STL', { kind: 'steal' }, owns)}
+        {act('BLK', { kind: 'block' }, owns)}
         {act('TO', { kind: 'turnover' }, owns)}
         {act('FOUL', { kind: 'foul' }, owns)}
         {act('SUB', { kind: 'sub' }, owns)}

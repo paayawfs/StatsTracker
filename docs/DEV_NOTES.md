@@ -1218,3 +1218,24 @@ Backlog added: technical fouls/subs during a break; reload mid-prompt loses the 
 chips show last names only (duplicates); who records steals/blocks in multi mode (both phones can);
 switching control mid-pregame drops the starter picks; shot-chart heat colours reuse team colours;
 viewer jargon (OR/DR/EFF, /40); admin unlock, rename/delete, live score on the admin game page.
+
+## Backlog round (2026-10-01)
+
+- **Breaks.** Fouls (incl. coach/bench technicals), subs and owed free throws work during a break;
+  nothing in play does (`BALL_IN_PLAY` in entry.ts). While something is being entered, or FTs are owed
+  (also FTs left at the buzzer), the break shows the court with its pickers instead of the break card.
+  Events are stamped at the period's 0:00, so they sort after `periodEnd` and the next period's lineups
+  include the sub.
+- **Reload mid-entry.** The entry step is saved per game (`scorer.entry.<gameId>`) and restored on open;
+  cleared when idle and on Leave game. Prompts for an event the server refuses are closed (an assist
+  prompt used to attach to the refused shot).
+- **Chip names.** `chipLabels`: last name, "K. Mensah" when teammates share it, full name if that clashes.
+- **Steals and blocks (multi mode).** Each phone records only its own team's players, steals/blocks/
+  assists included. A stealable turnover (bad pass, lost ball, unspecified) prompts the defence's phone
+  ("Steal? Tap the defender."), not the turnover team's; no more double-recorded steals.
+- **Viewer jargon.** Column tooltips (`abbr`), a "What do the columns mean?" key under the box score,
+  plainer Lineups/On-Off headings with one-line explanations.
+- **Admin.** Rename/delete teams, players (name + jersey), seasons; delete rule sets; delete a game no
+  one has scored. Deletes of things still in use are refused with a plain reason (FK 23503). Unlock =
+  an admin `void` of the `adminLock` event: `GameLog` stops applying a lifted lock, and migration
+  `20261001090000_unlock` clears `games.locked_at` (pgTAP `11_unlock`).

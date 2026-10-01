@@ -72,6 +72,8 @@ export class GameLog {
       list.push(e);
       this.corrections.set(e.payload.targetId, list);
       from = Math.min(from, this.insert(e), this.refresh(e.payload.targetId));
+      // Unlocking changes which scorer corrections apply.
+      if (this.locks.some((l) => l.id === e.payload.targetId)) for (const target of this.corrections.keys()) from = Math.min(from, this.refresh(target));
     } else {
       const effective = this.effective(e);
       if (effective) from = Math.min(from, this.insert(effective));
@@ -118,9 +120,13 @@ export class GameLog {
     return (this.corrections.get(id) ?? []).filter((c) => this.applies(c)).sort(compareWrites);
   }
 
-  /** After an admin lock, only admin corrections apply. */
+  /** After an admin lock, only admin corrections apply (until an admin voids the lock: unlock). */
   private applies(c: Correction): boolean {
-    return c.role === 'admin' || !this.locks.some((l) => compareWrites(l, c) < 0);
+    return c.role === 'admin' || !this.locks.some((l) => !this.lifted(l) && compareWrites(l, c) < 0);
+  }
+
+  private lifted(lock: GameEvent): boolean {
+    return (this.corrections.get(lock.id) ?? []).some((c) => c.type === 'void' && c.role === 'admin');
   }
 
   private effective(raw: GameEvent): GameEvent | null {

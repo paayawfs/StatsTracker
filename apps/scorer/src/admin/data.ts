@@ -21,6 +21,12 @@ export function must<T>(r: { data: T | null; error: { message: string } | null }
   return r.data as T;
 }
 
+/** Delete a row; if something still uses it (a foreign key), say what in plain words. */
+async function remove(table: string, id: string, inUse: string) {
+  const { error } = await db.from(table).delete().eq('id', id);
+  if (error) throw new Error(error.code === '23503' ? inUse : error.message);
+}
+
 export interface League { id: string; name: string }
 export interface Season { id: string; name: string }
 export interface TeamRow { id: string; name: string }
@@ -54,6 +60,19 @@ export async function addSeason(league: string, name: string) {
 }
 
 export const teams = async (league: string) => must(await db.from('teams').select('id, name').eq('league_id', league).order('name')) as TeamRow[];
+export async function renameSeason(league: string, id: string, name: string) {
+  if ((await seasons(league)).some((s) => s.id !== id && sameName(s.name, name))) throw new Error(`There is already a season called ${name.trim()}.`);
+  must(await db.from('seasons').update({ name: name.trim() }).eq('id', id).select());
+}
+export const deleteSeason = (id: string) => remove('seasons', id, 'This season has games. Move or delete them first.');
+
+export async function renameTeam(league: string, id: string, name: string) {
+  if ((await teams(league)).some((t) => t.id !== id && sameName(t.name, name))) throw new Error(`There is already a team called ${name.trim()}.`);
+  must(await db.from('teams').update({ name: name.trim() }).eq('id', id).select());
+}
+/** Deletes the team's players too. Refused if the team has games. */
+export const deleteTeam = (id: string) => remove('teams', id, 'This team has games, so it stays (its stats are part of them).');
+
 export async function addTeam(league: string, name: string) {
   if ((await teams(league)).some((t) => sameName(t.name, name))) throw new Error(`There is already a team called ${name.trim()}.`);
   return must(await db.from('teams').insert({ league_id: league, name: name.trim() }).select('id, name').single()) as TeamRow;
@@ -89,6 +108,13 @@ export function newPlayersProblem(rows: { name: string; default_jersey: string |
   return null;
 }
 
+export async function updatePlayer(team: string, id: string, p: { name: string; default_jersey: string | null }) {
+  const problem = newPlayersProblem([p], (await players([team])).filter((x) => x.id !== id));
+  if (problem) throw new Error(problem);
+  must(await db.from('players').update({ name: p.name.trim(), default_jersey: p.default_jersey }).eq('id', id).select());
+}
+export const deletePlayer = (id: string) => remove('players', id, 'This player is on a game roster, so they stay (their stats are part of it).');
+
 export async function addPlayers(team: string, rows: { name: string; default_jersey: string | null }[]) {
   const problem = newPlayersProblem(rows, await players([team]));
   if (problem) throw new Error(problem);
@@ -122,6 +148,9 @@ export async function saveRuleSet(league: string, rules: RuleSet, id?: string) {
   return must(id ? await db.from('rule_sets').update(row).eq('id', id).select().single() : await db.from('rule_sets').insert(row).select().single());
 }
 export { FIBA };
+export const deleteRuleSet = (id: string) => remove('rule_sets', id, 'Games use this rule set, so it stays.');
+/** Only a game nobody has scored can be deleted; played games are locked instead. */
+export const deleteGame = (id: string) => remove('games', id, 'This game has plays recorded. Lock it instead.');
 
 export const games = async (league: string) =>
   must(await db.from('games').select('id, team_a, team_b, season_id, rule_set_id, mode, shot_locations, public_slug, scheduled_at, locked_at').eq('league_id', league).order('created_at', { ascending: false })) as GameRow[];

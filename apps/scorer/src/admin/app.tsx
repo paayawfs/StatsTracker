@@ -7,6 +7,7 @@ import { useEffect } from 'preact/hooks';
 import {
   addAdmin, addPlayers, addSeason, addTeam, adminWrite, codes, createCode, createGame, createLeague, db, download, gameLog, gameRoster, games, latency,
   leagues, parsePlayers, players, PUBLIC_URL, revokeCode, ruleSets, saveRuleSet, seasons, setJersey, setPhoto, teams, user,
+  deleteGame, deletePlayer, deleteRuleSet, deleteSeason, deleteTeam, renameSeason, renameTeam, updatePlayer,
   type GameRow, type League, type PlayerRow, type RuleSetRow, type Season, type TeamRow,
 } from './data';
 
@@ -50,6 +51,45 @@ function useAction() {
 /** An error, or "Loading…" while there is neither data nor an error yet. */
 const Err = ({ msg, loading }: { msg: string; loading?: boolean }) => (msg ? <p class="error">{msg}</p> : loading ? <p class="small">Loading…</p> : null);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * A name with Edit: rename in place, or delete after a confirm. `jersey` adds a jersey field (players).
+ * Errors (duplicate name, still in use) show under the row.
+ */
+function Editable({ label, name, jersey, children, onSave, onDelete, deleteNote }: {
+  label: string; name: string; jersey?: string | null; children?: ComponentChildren;
+  onSave: (name: string, jersey: string | null) => Promise<unknown>; onDelete: () => Promise<unknown>; deleteNote?: string;
+}) {
+  const mode = useSignal<'view' | 'edit' | 'confirm'>('view');
+  const draft = useSignal({ name, jersey: jersey ?? '' });
+  const act = useAction();
+  if (mode.value === 'view') {
+    return (
+      <span class="editable">
+        {children ?? <span>{name}</span>}
+        <button class="link" aria-label={`Edit ${label} ${name}`} onClick={() => ((draft.value = { name, jersey: jersey ?? '' }), (mode.value = 'edit'))}>Edit</button>
+      </span>
+    );
+  }
+  const jerseyOk = jersey === undefined || draft.value.jersey === '' || /^\d{1,2}$/.test(draft.value.jersey);
+  return (
+    <span class="editable editing">
+      {jersey !== undefined && <input class="jersey" aria-label="Jersey" value={draft.value.jersey} onInput={(e) => (draft.value = { ...draft.value, jersey: e.currentTarget.value.trim() })} size={3} />}
+      <input aria-label={`${label} name`} value={draft.value.name} onInput={(e) => (draft.value = { ...draft.value, name: e.currentTarget.value })} />
+      <button class="primary" disabled={!draft.value.name.trim() || !jerseyOk || act.busy}
+        onClick={() => act.run(() => onSave(draft.value.name.trim(), draft.value.jersey || null), () => (mode.value = 'view'))}>Save</button>
+      {mode.value === 'confirm' ? (
+        <button class="danger" onClick={() => act.run(onDelete, () => (mode.value = 'view'))}>Yes, delete {name}</button>
+      ) : (
+        <button onClick={() => (mode.value = 'confirm')}>Delete…</button>
+      )}
+      <button onClick={() => (mode.value = 'view')}>Cancel</button>
+      {mode.value === 'confirm' && deleteNote && <span class="small">{deleteNote}</span>}
+      {!jerseyOk && <span class="error">A jersey is 0-99 or 00.</span>}
+      <Err msg={act.error} />
+    </span>
+  );
+}
 
 export function Admin() {
   if (!user.value) return <SignIn />;
@@ -210,7 +250,7 @@ function Teams({ league }: { league: League }) {
       <CsvImport league={league.id} teams={data.teams} players={data.players} done={reload} />
       <div class="team-cards">
         {data.teams.map((t) => (
-          <TeamCard key={t.id} team={t} players={data.players.filter((p) => p.team_id === t.id)} text={paste.value[t.id] ?? ''}
+          <TeamCard key={t.id} league={league.id} reload={reload} team={t} players={data.players.filter((p) => p.team_id === t.id)} text={paste.value[t.id] ?? ''}
             onText={(s) => (paste.value = { ...paste.value, [t.id]: s })}
             onAdd={() => act.run(() => addPlayers(t.id, parsePlayers(paste.value[t.id] ?? '')), () => ((paste.value = { ...paste.value, [t.id]: '' }), reload()))}
             onPhoto={(player, file) => act.run(async () => setPhoto(player, await photoFromFile(file)), reload)} />
@@ -220,17 +260,23 @@ function Teams({ league }: { league: League }) {
   );
 }
 
-function TeamCard({ team, players: ps, text, onText, onAdd, onPhoto }: { team: TeamRow; players: PlayerRow[]; text: string; onText: (s: string) => void; onAdd: () => void; onPhoto: (player: string, file: File) => void }) {
+function TeamCard({ league, reload, team, players: ps, text, onText, onAdd, onPhoto }: { league: string; reload: () => void; team: TeamRow; players: PlayerRow[]; text: string; onText: (s: string) => void; onAdd: () => void; onPhoto: (player: string, file: File) => void }) {
   const sorted = [...ps].sort((a, b) => Number(a.default_jersey ?? 999) - Number(b.default_jersey ?? 999));
   return (
     <article class="team-card" data-testid={`team-${team.name}`}>
-      <h3>{team.name} <span class="small">{plural(ps.length, 'player')}</span></h3>
+      <h3>
+        <Editable label="team" name={team.name} onSave={(n) => renameTeam(league, team.id, n).then(reload)} onDelete={() => deleteTeam(team.id).then(reload)}
+          deleteNote={ps.length ? `Its ${plural(ps.length, 'player')} go too.` : undefined}>
+          <span>{team.name}</span> <span class="small">{plural(ps.length, 'player')}</span>
+        </Editable>
+      </h3>
       <ol class="roster-list">
         {sorted.map((p) => (
           <li key={p.id}>
             <Avatar name={p.name} photo={p.photo} size={30} />
-            <b>{p.default_jersey ?? '–'}</b>
-            <span>{p.name}</span>
+            <Editable label="player" name={p.name} jersey={p.default_jersey} onSave={(n, j) => updatePlayer(team.id, p.id, { name: n, default_jersey: j }).then(reload)} onDelete={() => deletePlayer(p.id).then(reload)}>
+              <b>{p.default_jersey ?? '–'}</b> <span>{p.name}</span>
+            </Editable>
             <label class="photo-btn" title={`Photo for ${p.name}`}>
               {p.photo ? 'Change' : 'Photo'}
               <input type="file" accept="image/*" aria-label={`Photo for ${p.name}`} onChange={(e) => {
@@ -254,7 +300,7 @@ function Seasons({ league }: { league: League }) {
   const act = useAction();
   return (
     <section>
-      <ul class="list">{data?.map((s) => <li key={s.id}>{s.name}</li>)}</ul>
+      <ul class="list">{data?.map((s) => <li key={s.id}><Editable label="season" name={s.name} onSave={(n) => renameSeason(league.id, s.id, n).then(reload)} onDelete={() => deleteSeason(s.id).then(reload)} /></li>)}</ul>
       <form class="row" onSubmit={(e) => (e.preventDefault(), void act.run(() => addSeason(league.id, name.value.trim()), () => ((name.value = ''), reload())))}>
         <input id="new-season" placeholder="Season name, e.g. 2026/27" value={name.value} onInput={(e) => (name.value = e.currentTarget.value)} />
         <button class="primary" disabled={!name.value.trim() || act.busy}>Add season</button>
@@ -269,6 +315,7 @@ const MIN = 60_000;
 function Rules({ league }: { league: League }) {
   const { data, error, reload } = useLoad(() => ruleSets(league.id), [league.id]);
   const editing = useSignal<{ id?: string; rules: RuleSet } | null>(null);
+  const confirmDelete = useSignal(false);
   const act = useAction();
   const e = editing.value;
   const set = (patch: Partial<RuleSet>) => e && (editing.value = { ...e, rules: { ...e.rules, ...patch } });
@@ -304,6 +351,11 @@ function Rules({ league }: { league: League }) {
           <p class="small span">Timeout windows: {e.rules.timeouts.map((w) => `${w.count} in periods ${w.periods.join('-')}`).join(', ')} (from the preset).</p>
           <button class="primary">Save rule set</button>
           <button type="button" onClick={() => (editing.value = null)}>Cancel</button>
+          {e.id && (confirmDelete.value ? (
+            <button type="button" class="danger" onClick={() => act.run(() => deleteRuleSet(e.id!), () => ((editing.value = null), (confirmDelete.value = false), reload()))}>Yes, delete {e.rules.name}</button>
+          ) : (
+            <button type="button" onClick={() => (confirmDelete.value = true)}>Delete…</button>
+          ))}
         </form>
       )}
       <Err msg={act.error || error} />
@@ -397,6 +449,8 @@ function GamePage({ league, gameId, back }: { league: League; gameId: string; ba
   }, [gameId]);
   const act = useAction();
   const confirmLock = useSignal(false);
+  const confirmUnlock = useSignal(false);
+  const confirmDelete = useSignal(false);
   if (!data) return <div class="admin"><button onClick={back}>‹ Games</button><Err msg={error} /></div>;
   const { game, log } = data;
   const name = (id: string) => data.teams.find((t) => t.id === id)?.name ?? '?';
@@ -461,6 +515,27 @@ function GamePage({ league, gameId, back }: { league: League; gameId: string; ba
             </>
           ) : (
             <button onClick={() => (confirmLock.value = true)}>Lock game…</button>
+          ))}
+          {game.locked_at && (confirmUnlock.value ? (
+            <>
+              <span>Unlock? Scorers can write again (the lock and unlock stay in the history).</span>
+              <button class="danger" onClick={() => {
+                const lock = [...log.events].reverse().find((x) => x.type === 'adminLock');
+                if (lock) void act.run(() => adminWrite(log, gameId, { type: 'void', payload: { targetId: lock.id } }), () => ((confirmUnlock.value = false), reload()));
+              }}>Unlock game</button>
+              <button onClick={() => (confirmUnlock.value = false)}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={() => (confirmUnlock.value = true)}>Unlock game…</button>
+          ))}
+          {!started && (confirmDelete.value ? (
+            <>
+              <span>Delete this game? Its codes and roster go too.</span>
+              <button class="danger" onClick={() => act.run(() => deleteGame(gameId), back)}>Delete game</button>
+              <button onClick={() => (confirmDelete.value = false)}>Cancel</button>
+            </>
+          ) : (
+            <button onClick={() => (confirmDelete.value = true)}>Delete game…</button>
           ))}
           <button onClick={() => download(`${file}.csv`, eventsCsv(log.events), 'text/csv')}>Export CSV</button>
           <button onClick={() => download(`${file}.json`, JSON.stringify(log.events, null, 2), 'application/json')}>Export JSON</button>

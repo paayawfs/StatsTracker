@@ -39,7 +39,12 @@ function Game({ g }: { g: PublicGame }) {
         ))}
       </nav>
       <main>
-        {tab.value === 'box' && (['A', 'B'] as const).map((t) => <BoxTable key={t} g={g} team={t} />)}
+        {tab.value === 'box' && (
+          <>
+            {(['A', 'B'] as const).map((t) => <BoxTable key={t} g={g} team={t} />)}
+            <ColumnKey />
+          </>
+        )}
         {tab.value === 'plays' && <Plays g={g} />}
         {tab.value === 'lineups' && (['A', 'B'] as const).map((t) => <Lineups key={t} g={g} team={t} />)}
         {tab.value === 'onoff' && (['A', 'B'] as const).map((t) => <OnOff key={t} g={g} team={t} />)}
@@ -82,7 +87,22 @@ function Header({ g }: { g: PublicGame }) {
   );
 }
 
-const COLUMNS = ['MIN', 'PTS', 'FG', '3P', 'FT', 'OR', 'DR', 'REB', 'AST', 'TO', 'STL', 'BLK', 'PF', '+/-', 'EFF'];
+/** Box score columns and what they mean (tooltips and the key under the tables). */
+const COLUMNS: [string, string][] = [
+  ['MIN', 'Minutes played'], ['PTS', 'Points'], ['FG', 'Field goals made-attempted (2s and 3s)'], ['3P', 'Three-pointers made-attempted'],
+  ['FT', 'Free throws made-attempted'], ['OR', 'Offensive rebounds (own miss)'], ['DR', 'Defensive rebounds (opponent miss)'], ['REB', 'Total rebounds'],
+  ['AST', 'Assists'], ['TO', 'Turnovers'], ['STL', 'Steals'], ['BLK', 'Blocks'], ['PF', 'Personal fouls'],
+  ['+/-', "Team's points minus opponent's points while the player was on court"], ['EFF', 'Efficiency: points + rebounds + assists + steals + blocks, minus missed shots and turnovers'],
+];
+
+function ColumnKey() {
+  return (
+    <details class="key">
+      <summary>What do the columns mean?</summary>
+      <dl>{COLUMNS.map(([c, m]) => <div key={c}><dt>{c}</dt><dd>{m}</dd></div>)}</dl>
+    </details>
+  );
+}
 
 function BoxTable({ g, team }: { g: PublicGame; team: Team }) {
   const b = box.value;
@@ -97,8 +117,8 @@ function BoxTable({ g, team }: { g: PublicGame; team: Team }) {
           <thead>
             <tr>
               <th class="name">Player</th>
-              {COLUMNS.map((c) => (
-                <th key={c}>{c}</th>
+              {COLUMNS.map(([c, m]) => (
+                <th key={c} scope="col"><abbr title={m}>{c}</abbr></th>
               ))}
             </tr>
           </thead>
@@ -193,16 +213,17 @@ function Lineups({ g, team }: { g: PublicGame; team: Team }) {
   return (
     <section>
       <h2>{g.teams[team]} lineups</h2>
+      <p class="small explain">Each five-player group the team used: how long it played and the score while it was on court.</p>
       <div class="scroll">
       <table>
         <thead>
           <tr>
-            <th class="name">Unit (jerseys)</th>
+            <th class="name">Five on court (jerseys)</th>
             <th>MIN</th>
-            <th>PTS</th>
-            <th>OPP</th>
+            <th><abbr title="Points scored by this five">PTS</abbr></th>
+            <th><abbr title="Points the opponent scored against this five">OPP</abbr></th>
             <th>+/-</th>
-            <th>+/- /40</th>
+            <th><abbr title="Points margin scaled to a full 40-minute game (shown after 2 minutes together)">Per 40 min</abbr></th>
           </tr>
         </thead>
         <tbody>
@@ -227,16 +248,17 @@ function OnOff({ g, team }: { g: PublicGame; team: Team }) {
   return (
     <section>
       <h2>{g.teams[team]} on/off</h2>
+      <p class="small explain">How the team did with each player on the court versus on the bench.</p>
       <div class="scroll">
       <table>
         <thead>
           <tr>
             <th class="name">Player</th>
-            <th>ON MIN</th>
-            <th>ON +/-</th>
-            <th>OFF MIN</th>
-            <th>OFF +/-</th>
-            <th>/40 diff</th>
+            <th><abbr title="Minutes on court">On min</abbr></th>
+            <th><abbr title="Points margin with the player on court">On +/-</abbr></th>
+            <th><abbr title="Minutes on the bench">Off min</abbr></th>
+            <th><abbr title="Points margin with the player on the bench">Off +/-</abbr></th>
+            <th><abbr title="On minus off, per 40 minutes: how much better the team did with this player on court">Difference per 40</abbr></th>
           </tr>
         </thead>
         <tbody>

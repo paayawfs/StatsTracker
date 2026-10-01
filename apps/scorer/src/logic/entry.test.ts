@@ -277,6 +277,14 @@ describe('team actions', () => {
     expect(r.entry).toEqual({ step: 'sub', team: 'B', out: ['b2'], in: [] });
   });
 
+  test('during a break: fouls, subs and technicals, but no shots or turnovers', () => {
+    log.push(stamp({ type: 'periodEnd', payload: {} }));
+    expect(run(p('a1'), { kind: 'shot', value: 2, made: true }).emitted).toEqual([]);
+    expect(run(p('a1'), { kind: 'turnover' }).entry).toEqual({ step: 'player', player: 'a1' });
+    expect(run(p('a1'), { kind: 'sub' }, p('a6'), { kind: 'confirm' }).emitted.map((e) => e.type)).toEqual(['substitution']);
+    expect(run({ kind: 'benchFoul', team: 'B', offender: 'coach' }).emitted.map((e) => e.type)).toEqual(['foul']);
+  });
+
   test('timeout stops a running clock first', () => {
     log.push(stamp({ type: 'clockStart', payload: {} }));
     expect(run({ kind: 'timeout', team: 'B' }).emitted.map((e) => e.type)).toEqual(['clockStop', 'timeout']);
@@ -312,11 +320,12 @@ describe('ownership (multi mode)', () => {
     expect(off.emitted.at(-1)).toMatchObject({ type: 'rebound', payload: { team: 'A', kind: 'offensive' } });
   });
 
-  test('secondary players still work: fouled opponent, steal, block', () => {
+  test('the fouled opponent can be named; steals and blocks are left to the defence phone', () => {
     const foul = runAs(teamA, p('a1'), { kind: 'foul' }, { kind: 'foulKind', value: 'personal' }, p('b1'));
     expect(foul.emitted[0]).toMatchObject({ type: 'foul', payload: { team: 'A', fouled: 'b1' } });
-    const to = runAs(teamA, p('a2'), { kind: 'turnover' }, { kind: 'turnoverKind', value: 'badPass' }, p('b3'));
-    expect(to.emitted[1]).toMatchObject({ type: 'amend', payload: { body: { payload: { steal: 'b3' } } } });
+    const to = runAs(teamA, p('a2'), { kind: 'turnover' }, { kind: 'turnoverKind', value: 'badPass' });
+    expect(to.entry).toEqual(idle); // no steal prompt here: B's phone gets it
+    expect(runAs(teamA, p('b3'), { kind: 'steal' }).emitted).toEqual([]);
   });
 
   test('free throws only for teams this device owns', () => {

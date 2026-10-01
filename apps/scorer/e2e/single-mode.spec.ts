@@ -162,3 +162,38 @@ test('a replacement phone takes over scoring from one that died', async ({ page,
   await expect.poll(async () => (await serverEvents(g.slug)).filter((e) => e.type === 'shot').length).toBe(2);
   await context.close();
 });
+
+test('during a break: a coach technical with its free throw, and a sub; nothing in play', async ({ page }) => {
+  const g = await createGame();
+  await joinAndStart(page, g.code);
+  await menu(page, 'End period');
+  await expect(page.getByText('End of period 1')).toBeVisible();
+
+  await btn(page, 'Coach T').first().click(); // Lions coach -> 1 FT for the Tigers
+  await expect(page.getByText('FT 1/1: tap the Tigers shooter')).toBeVisible();
+  await player(page, 'B', 5).click();
+  await page.getByTestId('ft-made').click();
+  await expect(page.getByTestId('score-B')).toHaveText('1');
+  await expect(page.getByText('End of period 1')).toBeVisible(); // back to the break card
+
+  await player(page, 'A', 4).click();
+  await expect(btn(page, 'TO')).toBeDisabled();
+  await btn(page, 'SUB').click();
+  await player(page, 'A', 9).click();
+  await btn(page, 'Confirm').click();
+  await expect.poll(async () => (await serverEvents(g.slug)).filter((e) => e.type === 'substitution').length).toBe(1);
+});
+
+test('a half-entered play survives a reload', async ({ page }) => {
+  const g = await createGame();
+  await joinAndStart(page, g.code);
+  await player(page, 'B', 5).click();
+  await btn(page, 'FOUL').click();
+  await btn(page, 'shooting').click();
+  await player(page, 'A', 4).click();
+  await expect(page.getByText('Free throws awarded')).toBeVisible();
+  await page.reload();
+  await expect(page.getByText('Free throws awarded')).toBeVisible();
+  await btn(page, '2').click();
+  await expect(page.getByText('FT 1/2')).toBeVisible();
+});

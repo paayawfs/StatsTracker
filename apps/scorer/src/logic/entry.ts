@@ -47,8 +47,10 @@ export interface Ctx {
 }
 
 export const idle: Entry = { step: 'idle' };
+/** Nothing in play during a break: only fouls, subs, technicals and owed free throws. */
+const BALL_IN_PLAY = new Set<Input['kind']>(['shot', 'court', 'result', 'rebound', 'turnover', 'teamTurnover', 'block', 'steal', 'assist', 'timeout', 'team']);
 /** Turnovers that can come with a steal. After the others (travel, 3 sec...) the next tap starts a new play. */
-const STEALABLE = new Set<string>(['badPass', 'ballHandling', 'other']);
+export const STEALABLE = new Set<string>(['badPass', 'ballHandling', 'other']);
 const other = (t: Team): Team => (t === 'A' ? 'B' : 'A');
 
 function lastOf<T extends GameEvent>(events: readonly GameEvent[], match: (e: GameEvent) => e is T): T | undefined {
@@ -124,6 +126,8 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
     return limit && player && fouls >= limit && onFloor(player) ? { step: 'sub', team, out: [player], in: [] } : idle;
   };
 
+  if (state.phase === 'break' && BALL_IN_PLAY.has(input.kind)) return done(entry);
+
   const selected = entry.step === 'player' ? entry.player : undefined;
   const canTeam = (t: Team | undefined) => !!t && (ctx.can?.team(t) ?? true);
   const canControl = ctx.can?.control ?? true;
@@ -191,7 +195,7 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
         const kind = input.kind === 'turnoverKind' ? input.value : 'other';
         if (kind === 'offensiveFoul' && entry.player) return finishFoul({ team: entry.team, player: entry.player, kind: 'offensive' });
         const turnover = emit<Turnover>({ type: 'turnover', payload: { team: entry.team, ...(entry.player ? { player: entry.player } : {}), kind } });
-        return done(STEALABLE.has(kind) ? { step: 'steal', turnover } : idle);
+        return done(STEALABLE.has(kind) && canTeam(other(entry.team)) ? { step: 'steal', turnover } : idle);
       }
       break;
     case 'foulKind':
@@ -241,8 +245,9 @@ export function step(entry: Entry, input: Input, ctx: Ctx): { entry: Entry; even
   const team = selected ? teamOf(selected) : undefined;
   if (!selected || !team) return done(entry);
   // Primary actions belong to the selected player's team; amends (block/steal/assist) don't.
-  const primary = ['shot', 'court', 'rebound', 'turnover', 'foul', 'sub'].includes(input.kind);
-  if (primary && !canTeam(team)) return done(entry);
+  // Each phone records its own team's players (in multi mode the defence's phone records its steals and blocks).
+  const own = ['shot', 'court', 'rebound', 'turnover', 'foul', 'sub', 'block', 'steal', 'assist'].includes(input.kind);
+  if (own && !canTeam(team)) return done(entry);
 
   switch (input.kind) {
     case 'shot':

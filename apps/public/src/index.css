@@ -44,6 +44,14 @@ small, .small { color: var(--muted); font-size: 0.8rem; }
 .tabs { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 16px 4px; } /* wrap, so no tab hides off-screen on phones */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .none { padding: 16px 4px; }
+abbr { text-decoration: none; cursor: help; }
+.explain { margin: -4px 2px 8px; }
+.key { margin: 14px 2px; color: var(--muted); font-size: 0.85rem; }
+.key summary { cursor: pointer; font-weight: 600; color: var(--text); min-height: 32px; }
+.key dl { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 4px 16px; margin: 8px 0 0; }
+.key dl div { display: flex; gap: 8px; }
+.key dt { font-weight: 700; color: var(--text); min-width: 2.6em; }
+.key dd { margin: 0; }
 .tabs button { white-space: nowrap; min-height: 40px; }
 main { padding: 4px 16px 32px; }
 h2 { font-size: 1rem; margin: 18px 0 8px; text-wrap: balance; }

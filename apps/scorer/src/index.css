@@ -247,6 +247,9 @@ input, select, textarea { font: inherit; color: var(--text); background: var(--s
 .admin .row input { flex: 1; min-width: min(12em, 100%); }
 .admin code { overflow-wrap: anywhere; }
 .admin .scroll-x { overflow-x: auto; }
+.admin .editable { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.admin .editable.editing input:not(.jersey) { flex: 1; min-width: min(10em, 100%); }
+.admin .editable .link { min-height: 32px; font-size: 0.8rem; }
 .admin .danger { background: var(--miss); border-color: var(--miss); color: #fff; }
 .admin code.code { white-space: nowrap; } /* an 8-character code never splits in two */ /* long viewer links wrap on phones */
 .admin > * { min-width: 0; }

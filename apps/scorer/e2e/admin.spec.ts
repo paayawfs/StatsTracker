@@ -98,6 +98,16 @@ test('admin: set up a league, run a game with a scorer, lock it, export, season 
   await btn(admin, 'Make it 2PT').click();
   await expect(admin.getByRole('heading', { name: 'Lions 2 – 2 Tigers' })).toBeVisible();
 
+  // Unlock: scorers can write again.
+  await btn(admin, 'Unlock game…').click();
+  await btn(admin, 'Unlock game').click();
+  await expect(admin.getByText('Locked', { exact: true })).toHaveCount(0);
+  await player(scorer, 'A', 6).click();
+  await btn(scorer, '2 ✓').click();
+  await btn(scorer, 'Skip').click();
+  await expect(scorer.getByTestId('score-A')).toHaveText('4');
+  await expect(scorer.getByText('to sync')).toHaveCount(0, { timeout: 10_000 });
+
   // Season stats include the game.
   await btn(admin, '‹ Games').click();
   await btn(admin, 'Season stats').click();
@@ -150,4 +160,56 @@ test('admin: import a roster CSV, map the columns, preview, import', async ({ br
   await expect(admin.getByTestId('team-Lions').getByText('2 players')).toBeVisible();
   await expect(admin.getByTestId('team-Tigers').getByText('1 player', { exact: true })).toBeVisible();
   await expect(admin.getByTestId('team-Lions').getByText('Boateng, Yaw')).toBeVisible();
+});
+
+test('admin: rename a team, edit and delete players, delete a season', async ({ browser }) => {
+  const admin = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  await admin.goto('/admin');
+  await admin.getByLabel('Email').fill(`edit-${Date.now()}@example.com`);
+  await admin.getByLabel('Password').fill('correct-horse-battery');
+  await btn(admin, 'Create account').click();
+  await admin.getByPlaceholder('League name').fill('Edit League');
+  await btn(admin, 'Create league').click();
+  await admin.getByRole('button', { name: 'Edit League' }).click();
+
+  await btn(admin, 'Teams & players').click();
+  await admin.getByPlaceholder('Team name').fill('Lions');
+  await btn(admin, 'Add team').click();
+  const card = admin.getByTestId('team-Lions');
+  await card.getByRole('textbox').fill('4 Kofi Mensah\n5 Ama Ofori');
+  await card.getByRole('button', { name: 'Add 2 players' }).click();
+
+  // Rename the team (a duplicate name is refused first).
+  await admin.getByPlaceholder('Team name').fill('Tigers');
+  await btn(admin, 'Add team').click();
+  await admin.getByRole('button', { name: 'Edit team Lions' }).click();
+  await admin.getByLabel('team name').fill('tigers');
+  await btn(admin, 'Save').click();
+  await expect(admin.getByText('There is already a team called tigers.')).toBeVisible();
+  await admin.getByLabel('team name').fill('Accra Lions');
+  await btn(admin, 'Save').click();
+  const renamed = admin.getByTestId('team-Accra Lions');
+  await expect(renamed).toBeVisible();
+
+  // Edit a player's name and jersey; then delete the other.
+  await renamed.getByRole('button', { name: 'Edit player Kofi Mensah' }).click();
+  await renamed.getByLabel('Jersey').fill('23');
+  await renamed.getByLabel('player name').fill('Kofi Mensah Jr');
+  await btn(admin, 'Save').click();
+  await expect(renamed.getByText('Kofi Mensah Jr')).toBeVisible();
+  await expect(renamed.getByText('23', { exact: true })).toBeVisible();
+  await renamed.getByRole('button', { name: 'Edit player Ama Ofori' }).click();
+  await btn(admin, 'Delete…').click();
+  await btn(admin, 'Yes, delete Ama Ofori').click();
+  await expect(renamed.getByText('Ama Ofori')).toHaveCount(0);
+  await expect(renamed.getByText('1 player', { exact: true })).toBeVisible();
+
+  // Seasons: add, then delete.
+  await btn(admin, 'Seasons').click();
+  await admin.getByPlaceholder('Season name, e.g. 2026/27').fill('2025');
+  await btn(admin, 'Add season').click();
+  await admin.getByRole('button', { name: 'Edit season 2025' }).click();
+  await btn(admin, 'Delete…').click();
+  await btn(admin, 'Yes, delete 2025').click();
+  await expect(admin.getByText('2025')).toHaveCount(0);
 });

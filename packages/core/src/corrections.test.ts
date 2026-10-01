@@ -155,6 +155,18 @@ describe('admin lock', () => {
     expect(g.state.score.A).toBe(0);
   });
 
+  test('unlock: an admin void of the lock lifts it, and scorer corrections apply again', () => {
+    const s = two();
+    const end = { gameClock: 0 };
+    const lock = ev('adminLock', {}, { ...end, seq: 100 });
+    const g = build(gameStart(), periodStart(), s, lock);
+    expect(g.state.locked).toBe(true);
+    g.add(ev('void', { targetId: lock.id }, { ...end, seq: 101, role: 'admin' }));
+    expect(g.state.locked).toBe(false);
+    g.add(ev('void', { targetId: s.id }, { ...end, seq: 102, role: 'teamA' }));
+    expect(g.state.score.A).toBe(0);
+  });
+
   test('a lock arriving late still blocks later-seq scorer corrections', () => {
     const s = two();
     const end = { gameClock: 0 };

@@ -3,7 +3,7 @@ import { initialState, periodLength, type EventBody, type EventOf, type GameEven
 import { GameSync, LocalStore, SupabaseTransport, supabaseClientOptions } from '@stats/sync';
 import { createClient } from '@supabase/supabase-js';
 import { describe as describeEvent, remaining } from '@stats/core';
-import { idle, step, type Entry, type Input } from './logic/entry';
+import { idle, STEALABLE, step, type Entry, type Input } from './logic/entry';
 import { keyCommand, promptTeam, resolveJersey } from './logic/keys';
 import { capabilities, heldRoles, roleFor } from './logic/ownership';
 import { latencyUploader } from './logic/latency';
@@ -73,6 +73,7 @@ let lastStamp = { deviceSeq: 0, wallClock: 0 };
 /** Ids already undone plus undo markers; kept per game so Undo after a reload doesn't undo an undo. */
 let undone = new Set<string>();
 const undoneKey = (gameId: string) => `scorer.undone.${gameId}`;
+const entryKey = (gameId: string) => `scorer.entry.${gameId}`;
 /** Stops the timers and listeners of the open game. */
 let stopTimers = () => {};
 /** A peer's miss this phone should take the defensive rebound for, while it was busy. */
@@ -131,6 +132,7 @@ export function leave() {
   void uploader?.flush();
   uploader = null;
   localStorage.removeItem(INFO_KEY);
+  if (info.value) localStorage.removeItem(entryKey(info.value.gameId));
   info.value = null;
   state.value = initialState;
   events.value = [];
@@ -195,7 +197,12 @@ async function open(gameInfo: GameInfo) {
     peerLatency.value = [...peerLatency.value.slice(-199), ms];
     up.add('peer', ms);
   };
-  s.onRejected = (_, reason) => (notice.value = `The server refused an event: ${reason}`);
+  s.onRejected = (ev, reason) => {
+    notice.value = `The server refused an event: ${reason}`;
+    // A prompt for the refused play (assist, steal) would attach to an event that no longer exists.
+    const e = entry.value;
+    if ((e.step === 'assist' && e.shot.id === ev.id) || (e.step === 'steal' && e.turnover.id === ev.id)) entry.value = idle;
+  };
   s.onConflict = () => (notice.value = 'Another scorer changed an event you corrected. The latest change wins.');
   timers.push(
     setInterval(() => {
@@ -211,6 +218,23 @@ async function open(gameInfo: GameInfo) {
   myDevice.value = s.deviceId;
   info.value = gameInfo;
   refresh();
+  // Pick up a play that was half entered when the page reloaded (it only lives on this phone).
+  try {
+    const saved = JSON.parse(localStorage.getItem(entryKey(s.gameId)) ?? 'null') as Entry | null;
+    if (saved?.step && saved.step !== 'idle') entry.value = saved;
+  } catch {
+    // nothing to restore
+  }
+  const unsave = entry.subscribe((v) => {
+    try {
+      if (v.step === 'idle') localStorage.removeItem(entryKey(s.gameId));
+      else localStorage.setItem(entryKey(s.gameId), JSON.stringify(v));
+    } catch {
+      // storage full or blocked: the entry just won't survive a reload
+    }
+  });
+  const stopEntryTimers = stopTimers;
+  stopTimers = () => (unsave(), stopEntryTimers());
   void navigator.storage?.persist?.();
   claimRole();
 }
@@ -254,9 +278,13 @@ function onPeerEvent(e: GameEvent) {
       if (entry.value.step === 'idle') entry.value = { step: 'rebound', shooterTeam };
       else deferredRebound = shooterTeam;
     }
+  } else if (e.type === 'turnover' && STEALABLE.has(e.payload.kind) && !e.payload.steal) {
+    deferredRebound = null;
+    const defence: Team = e.payload.team === 'A' ? 'B' : 'A';
+    if (can.value.team(defence) && !can.value.team(e.payload.team) && entry.value.step === 'idle') entry.value = { step: 'steal', turnover: e };
   } else if (['rebound', 'shot', 'turnover', 'periodEnd', 'freeThrow'].includes(e.type)) {
     deferredRebound = null;
-    if (entry.value.step === 'rebound') entry.value = idle; // someone else answered it
+    if (entry.value.step === 'rebound' || entry.value.step === 'steal') entry.value = idle; // the moment passed
   }
 }
 

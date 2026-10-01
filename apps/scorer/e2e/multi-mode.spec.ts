@@ -38,8 +38,17 @@ test('three devices: clock device runs the game, split rebound and free-throw pr
   // A device selecting an opponent only gets the secondary actions.
   await player(a.page, 'B', 4).click();
   await expect(btn(a.page, '2 ✓')).toBeDisabled(); // opponent selected: no primary actions here
-  await expect(btn(a.page, 'BLK')).toBeVisible();
+  await expect(btn(a.page, 'BLK')).toBeDisabled(); // B's blocks and steals are recorded on B's phone
   await btn(a.page, 'Cancel').click();
+
+  // A loses it on a bad pass: the steal prompt goes to B's phone, not A's.
+  await player(a.page, 'A', 5).click();
+  await btn(a.page, 'TO').click();
+  await btn(a.page, 'Bad pass').click();
+  await expect(b.page.getByText('Steal? Tap the defender.')).toBeVisible();
+  await expect(a.page.getByText('Steal? Tap the defender.')).toHaveCount(0);
+  await player(b.page, 'B', 4).click();
+  await expect(b.page.getByText('Steal? Tap the defender.')).toHaveCount(0);
 
   // Timeouts live on the control device only.
   await expect(a.page.getByRole('button', { name: /^Timeout/ })).toHaveCount(0);
@@ -59,7 +68,7 @@ test('three devices: clock device runs the game, split rebound and free-throw pr
   for (const d of [a, b, c]) await expect(d.page.getByText('to sync')).toHaveCount(0, { timeout: 10_000 });
   const types = (await serverEvents(g.slug)).map((e) => e.type);
   expect(types.filter((t) => t === 'roleClaim')).toHaveLength(3);
-  expect(types).toEqual(expect.arrayContaining(['shot', 'rebound', 'foul', 'freeThrow', 'timeout', 'clockStart']));
+  expect(types).toEqual(expect.arrayContaining(['shot', 'rebound', 'foul', 'freeThrow', 'timeout', 'clockStart', 'turnover', 'amend']));
   for (const d of [a, b, c]) await expect(d.page.getByText(/refused/)).toHaveCount(0);
 });
 
